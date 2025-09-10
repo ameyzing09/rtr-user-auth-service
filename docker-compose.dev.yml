@@ -1,0 +1,33 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount source code for development
+      - .:/app
+    environment:
+      # Override for development
+      GIN_MODE: debug
+      JWT_SECRET: dev-secret-key-32-characters-long-for-development
+    ports:
+      - "8080:8080"
+    # Enable debugger port
+    expose:
+      - "2345"
+    ports:
+      - "2345:2345"
+
+  # Add Redis for session storage (development)
+  redis:
+    image: redis:7-alpine
+    container_name: recrutr_redis_dev
+    ports:
+      - "6379:6379"
+    networks:
+      - recrutr_network

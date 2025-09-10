@@ -1,0 +1,32 @@
+# Binaries
+/bin/
+/tmp/
+
+# IDE files
+.vscode/
+.idea/
+
+# Environment files
+.env
+
+# Dependencies
+vendor/
+
+# Test coverage
+coverage.out
+*.cover
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Docker
+.docker/
