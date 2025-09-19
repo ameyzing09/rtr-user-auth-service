@@ -16,32 +16,10 @@ func NewUserHandler(authService services.AuthService) *UserHandler {
 	return &UserHandler{authService: authService}
 }
 
-func (h *UserHandler) Register(c *gin.Context) {
-	var registerReq RegisterRequest
-	if err := c.ShouldBindBodyWithJSON((&registerReq)); err != nil {
-		c.JSON((http.StatusBadRequest), gin.H{"error": err.Error()})
-		return
-	}
-	actor := c.MustGet("actor").(services.UserRead)
-
-	output, err := h.authService.Register(c, actor, services.RegisterInput{
-		TenantID: actor.TenantID,
-		Name:     registerReq.Name,
-		Email:    registerReq.Email,
-		Password: registerReq.Password,
-		Role:     registerReq.Role,
-	})
-	if err != nil {
-		httpx.HandleError(c, err)
-		return
-	}
-	c.JSON(http.StatusCreated, output)
-}
-
 func (h *UserHandler) Login(c *gin.Context) {
 	var loginReq LoginRequest
 	if err := c.ShouldBindJSON(&loginReq); err != nil {
-		c.JSON((http.StatusBadRequest), gin.H{"error": err.Error()})
+		httpx.HandleBindingError(c, err)
 		return
 	}
 
@@ -49,7 +27,6 @@ func (h *UserHandler) Login(c *gin.Context) {
 		Email:    loginReq.Email,
 		Password: loginReq.Password,
 	})
-
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
@@ -66,12 +43,12 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 func (h *UserHandler) GetMe(c *gin.Context) {
 	actor := c.MustGet("actor").(services.UserRead)
-	users, err := h.authService.GetMe(c, actor.ID, actor.TenantID)
+	user, err := h.authService.GetMe(c, actor.ID, actor.TenantID)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, users)
+	c.JSON(http.StatusOK, user)
 }
 
 func (h *UserHandler) ListUsers(c *gin.Context) {
@@ -82,4 +59,49 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, users)
+}
+
+func (h *UserHandler) CreateUser(c *gin.Context) {
+	actor := c.MustGet("actor").(services.UserRead)
+
+	var req CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.HandleBindingError(c, err)
+		return
+	}
+
+	user, tempPassword, err := h.authService.CreateUser(c, actor.TenantID, actor, services.CreateUserInput{
+		Email: req.Email,
+		Name:  req.Name,
+		Role:  req.Role,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"user":               user,
+		"temporary_password": tempPassword,
+	})
+}
+
+func (h *UserHandler) ChangePassword(c *gin.Context) {
+	actor := c.MustGet("actor").(services.UserRead)
+
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.HandleBindingError(c, err)
+		return
+	}
+
+	if err := h.authService.ChangePassword(c, actor.TenantID, actor, services.ChangePasswordInput{
+		CurrentPassword: req.CurrentPassword,
+		NewPassword:     req.NewPassword,
+	}); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

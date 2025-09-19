@@ -1,19 +1,38 @@
 package routes
 
 import (
+	"net/http"
 	"rtr-user-auth-service/handlers"
 	"rtr-user-auth-service/middleware"
+	"rtr-user-auth-service/repositories"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler) {
-	r.POST("/login", userHandler.Login)
-	auth := r.Group("/auth")
-	auth.Use(middleware.AuthMiddleware())
+func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSettingHandler *handlers.TenantSettingHandler, tenantRepo repositories.TenantRepository) {
+	r.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "rtr-user-auth-service: ok")
+	})
+
+	publicRoute := r.Group("/")
+	publicRoute.Use(middleware.TenantResolver(tenantRepo))
 	{
-		auth.POST("/register", userHandler.Register)
-		auth.GET("/me", userHandler.GetMe)
-		auth.GET("/users", userHandler.ListUsers)
+		publicRoute.POST("/login", userHandler.Login)
+
+		tenantScope := publicRoute.Group("/tenant")
+		tenantScope.GET("/settings", tenantSettingHandler.Get)
+	}
+
+	protectedRoute := r.Group("/")
+	protectedRoute.Use(middleware.TenantResolver(tenantRepo), middleware.AuthMiddleware())
+	{
+		protectedRoute.GET("/me", userHandler.GetMe)
+		protectedRoute.POST("/users/change-password", userHandler.ChangePassword)
+
+		protectedRoute.GET("/users", userHandler.ListUsers)
+		protectedRoute.POST("/users", userHandler.CreateUser)
+
+		tenantScope := protectedRoute.Group("/tenant")
+		tenantScope.PUT("/settings", tenantSettingHandler.Put)
 	}
 }

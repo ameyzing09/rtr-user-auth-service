@@ -22,64 +22,6 @@ func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository) *authServ
 	return &authService{db: db, users: u, tenants: t}
 }
 
-func (s *authService) Register(ctx context.Context, actor UserRead, input RegisterInput) (UserRead, error) {
-	switch actor.Role {
-	case models.RoleAdmin:
-	case models.RoleHR:
-		if input.Role != models.RoleCandidate {
-			return UserRead{}, domain.ErrForbidden
-		}
-	default:
-		return UserRead{}, domain.ErrForbidden
-	}
-	if actor.TenantID != input.TenantID {
-		return UserRead{}, domain.ErrForbidden
-	}
-	exists, err := s.tenants.Exists(ctx, input.TenantID)
-	if err != nil {
-		return UserRead{}, err
-	}
-
-	if !exists {
-		return UserRead{}, domain.ErrTenantNotFound
-	}
-
-	email := strings.ToLower(strings.TrimSpace(input.Email))
-	already, err := s.users.EmailExists(ctx, input.TenantID, email)
-	if err != nil {
-		return UserRead{}, err
-	}
-	if already {
-		return UserRead{}, domain.ErrEmailInUse
-	}
-
-	hash, err := utils.HashPassword(input.Password)
-	if err != nil {
-		return UserRead{}, err
-	}
-
-	user := &models.User{
-		ID:       uuid.NewString(),
-		TenantID: input.TenantID,
-		Name:     strings.TrimSpace(input.Name),
-		Email:    email,
-		Password: hash,
-		Role:     input.Role,
-	}
-
-	if err := s.users.Create(ctx, user); err != nil {
-		return UserRead{}, err
-	}
-
-	return UserRead{
-		ID:       user.ID,
-		TenantID: user.TenantID,
-		Name:     user.Name,
-		Email:    user.Email,
-		Role:     user.Role,
-	}, nil
-}
-
 func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, UserRead, error) {
 	email := strings.ToLower(strings.TrimSpace(input.Email))
 	user, err := s.users.FindByEmail(ctx, email)
@@ -89,7 +31,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, U
 	if !utils.CheckPassword(user.Password, input.Password) {
 		return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
 	}
-	token, exp, err := utils.SignJWT(user.ID, user.TenantID, string(user.Role), 24*time.Hour)
+	token, exp, err := utils.SignJWT(user.ID, user.TenantID, user.Email, string(user.Role), 24*time.Hour)
 	if err != nil {
 		return AuthToken{}, UserRead{}, err
 	}
@@ -121,7 +63,7 @@ func (s *authService) ListUsers(ctx context.Context, tenantID string) ([]UserRea
 	if err != nil {
 		return nil, err
 	}
-	output := make([]UserRead, len(list))
+	output := make([]UserRead, 0, len(list))
 	for _, user := range list {
 		output = append(output, UserRead{
 			ID:       user.ID,
@@ -132,4 +74,65 @@ func (s *authService) ListUsers(ctx context.Context, tenantID string) ([]UserRea
 		})
 	}
 	return output, nil
+}
+
+func (s *authService) CreateUser(ctx context.Context, tenantID string, actor UserRead, input CreateUserInput) (UserRead, string, error) {
+	if actor.Role != models.RoleAdmin {
+		return UserRead{}, "", domain.ErrForbidden
+	}
+
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	exists, err := s.users.EmailExists(ctx, tenantID, email)
+	if err != nil {
+		return UserRead{}, "", err
+	}
+	if exists {
+		return UserRead{}, "", domain.ErrEmailInUse
+	}
+
+	temp := utils.GenerateTempPassword()
+
+	hashed, err := utils.HashPassword(temp)
+	if err != nil {
+		return UserRead{}, "", err
+	}
+
+	user := &models.User{
+		TenantID:            tenantID,
+		ID:                  uuid.NewString(),
+		Email:               email,
+		Name:                strings.TrimSpace(input.Name),
+		Role:                input.Role,
+		Password:            hashed,
+		ForcePasswordChange: true,
+	}
+
+	if err := s.users.Create(ctx, user); err != nil {
+		return UserRead{}, "", err
+	}
+	return toRead(user), temp, nil
+}
+
+func (s *authService) ChangePassword(ctx context.Context, tenantID string, actor UserRead, input ChangePasswordInput) error {
+	u, err := s.users.FindByID(ctx, tenantID, actor.ID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	if !utils.CheckPassword(u.Password, input.CurrentPassword) || input.CurrentPassword == input.NewPassword {
+		return ErrInvalidCredentials
+	}
+	hashedPassword, err := utils.HashPassword(input.NewPassword)
+	if err != nil {
+		return err
+	}
+
+	return s.users.UpdatePassword(ctx, tenantID, actor.ID, hashedPassword, true)
+}
+
+func toRead(u *models.User) UserRead {
+	return UserRead{
+		ID: u.ID, TenantID: u.TenantID, Name: u.Name, Email: u.Email,
+		Role: u.Role, MustChangePassword: u.ForcePasswordChange,
+	}
 }

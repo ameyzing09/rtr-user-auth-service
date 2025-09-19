@@ -7,6 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
+type TenantRepository interface {
+	Exists(ctx context.Context, tenantID string) (bool, error)
+	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+}
+
 type GormTenantRepo struct {
 	db *gorm.DB
 }
@@ -25,4 +30,14 @@ func (r *GormTenantRepo) Exists(ctx context.Context, tenantID string) (bool, err
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *GormTenantRepo) FindByDomain(ctx context.Context, domain string) (*models.Tenant, error) {
+	var t models.Tenant
+	if err := r.db.WithContext(ctx).
+		Where("domain=?", domain).
+		First(&t).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
 }

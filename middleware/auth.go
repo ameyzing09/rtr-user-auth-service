@@ -38,10 +38,14 @@ func AuthMiddleware() gin.HandlerFunc {
 		actor := services.UserRead{
 			ID:       claims.UserID,
 			TenantID: claims.TenantID,
+			Email:    claims.Email,
 			Role:     models.Role(claims.Role),
 		}
+		if tid := c.GetString(CtxTenantIDKey); tid != "" && tid != actor.TenantID {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access to this tenant is forbidden"})
+			return
+		}
 		c.Set("actor", actor)
-		c.Header("X-Tenant-ID", actor.TenantID)
 		c.Next()
 	}
 }

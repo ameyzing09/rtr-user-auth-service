@@ -10,6 +10,8 @@ import (
 type Tenant struct {
 	ID       string    `gorm:"type:char(36);primaryKey"`
 	Name     string    `gorm:"type:varchar(255);uniqueIndex:ux_tenants_name,priority:1, not null"`
+	Domain   string    `gorm:"type:varchar(255);uniqueIndex:ux_tenants_domain,priority:1, not null"`
+	Plan     string    `gorm:"type:varchar(50);not null;default:'FREE'"` // e.g. FREE, BASIC, PREMIUM
 	CreateAt time.Time `gorm:"not null;default:CURRENT_TIMESTAMP"`
 	UpdateAt time.Time `gorm:"not null;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
 }
