@@ -10,6 +10,7 @@ import (
 type TenantRepository interface {
 	Exists(ctx context.Context, tenantID string) (bool, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
 }
 
 type GormTenantRepo struct {
@@ -24,7 +25,7 @@ func (r *GormTenantRepo) Exists(ctx context.Context, tenantID string) (bool, err
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Model(&models.Tenant{}).
-		Where("id=?", tenantID).
+		Where("id = ?", tenantID).
 		Count(&count).
 		Error; err != nil {
 		return false, err
@@ -35,7 +36,17 @@ func (r *GormTenantRepo) Exists(ctx context.Context, tenantID string) (bool, err
 func (r *GormTenantRepo) FindByDomain(ctx context.Context, domain string) (*models.Tenant, error) {
 	var t models.Tenant
 	if err := r.db.WithContext(ctx).
-		Where("domain=?", domain).
+		Where("domain = ?", domain).
+		First(&t).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *GormTenantRepo) FindByID(ctx context.Context, tenantID string) (*models.Tenant, error) {
+	var t models.Tenant
+	if err := r.db.WithContext(ctx).
+		Where("id = ?", tenantID).
 		First(&t).Error; err != nil {
 		return nil, err
 	}

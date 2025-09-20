@@ -62,6 +62,7 @@ type UserRepository interface {
 type TenantRepository interface {
 	Exists(ctx context.Context, tenantID string) (bool, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
 }
 
 type TenantSettingService interface {

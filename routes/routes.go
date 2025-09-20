@@ -15,7 +15,7 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 	})
 
 	publicRoute := r.Group("/")
-	publicRoute.Use(middleware.TenantResolver(tenantRepo))
+	publicRoute.Use(middleware.TenantContext(tenantRepo))
 	{
 		publicRoute.POST("/login", userHandler.Login)
 
@@ -24,10 +24,10 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 	}
 
 	protectedRoute := r.Group("/")
-	protectedRoute.Use(middleware.TenantResolver(tenantRepo), middleware.AuthMiddleware())
+	protectedRoute.Use(middleware.TenantContext(tenantRepo), middleware.AuthMiddleware())
 	{
 		protectedRoute.GET("/me", userHandler.GetMe)
-		protectedRoute.POST("/users/change-password", userHandler.ChangePassword)
+		protectedRoute.POST("/me/change-password", userHandler.ChangePassword)
 
 		protectedRoute.GET("/users", userHandler.ListUsers)
 		protectedRoute.POST("/users", userHandler.CreateUser)
