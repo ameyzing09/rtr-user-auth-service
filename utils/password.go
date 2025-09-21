@@ -16,8 +16,10 @@ func CheckPassword(hashedPassword, plainPassword string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(plainPassword)) == nil
 }
 
-func GenerateTempPassword() string {
+func GenerateTempPassword() (string, error) {
 	b := make([]byte, 12)
-	rand.Read(b)
-	return base64.StdEncoding.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
 }

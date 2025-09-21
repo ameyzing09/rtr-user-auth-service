@@ -62,7 +62,7 @@ func (r *GormUserRepo) ListByTenant(ctx context.Context, tenantID string) ([]mod
 	return users, nil
 }
 
-func (r *GormUserRepo) UpdatePassword(ctx context.Context, userID, tenantID, newHashedPassword string, forceChange bool) error {
+func (r *GormUserRepo) UpdatePassword(ctx context.Context, tenantID, userID, newHashedPassword string, forceChange bool) error {
 	q := r.db.WithContext(ctx).
 		Model(&models.User{}).
 		Where("id = ? AND tenant_id = ?", userID, tenantID)

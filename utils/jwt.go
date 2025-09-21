@@ -30,7 +30,7 @@ func SignJWT(userID, tenantID, email, role string, ttl time.Duration) (string, t
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(secret))
 	return signed, exp, err
 }

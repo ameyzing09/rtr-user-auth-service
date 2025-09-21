@@ -45,7 +45,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, U
 }
 
 func (s *authService) GetMe(ctx context.Context, userID, tenantID string) (UserRead, error) {
-	user, err := s.users.FindByID(ctx, userID, tenantID)
+	user, err := s.users.FindByID(ctx, tenantID, userID)
 	if err != nil {
 		return UserRead{}, err
 	}
@@ -90,9 +90,12 @@ func (s *authService) CreateUser(ctx context.Context, tenantID string, actor Use
 		return UserRead{}, "", domain.ErrEmailInUse
 	}
 
-	temp := utils.GenerateTempPassword()
+	tempPassword, tempPasswordError := utils.GenerateTempPassword()
+	if tempPasswordError != nil {
+		return UserRead{}, "", tempPasswordError
+	}
 
-	hashed, err := utils.HashPassword(temp)
+	hashed, err := utils.HashPassword(tempPassword)
 	if err != nil {
 		return UserRead{}, "", err
 	}
@@ -110,7 +113,7 @@ func (s *authService) CreateUser(ctx context.Context, tenantID string, actor Use
 	if err := s.users.Create(ctx, user); err != nil {
 		return UserRead{}, "", err
 	}
-	return toRead(user), temp, nil
+	return toRead(user), tempPassword, nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, tenantID string, actor UserRead, input ChangePasswordInput) error {
