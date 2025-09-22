@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSettingHandler *handlers.TenantSettingHandler, tenantRepo repositories.TenantRepository) {
+func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSettingHandler *handlers.TenantSettingHandler, tenantHandler *handlers.TenantHandler, tenantRepo repositories.TenantRepository) {
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "rtr-user-auth-service: ok")
 	})
@@ -34,5 +34,14 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 
 		tenantScope := protectedRoute.Group("/tenant")
 		tenantScope.PUT("/settings", tenantSettingHandler.Put)
+	}
+
+	// SUPERADMIN-only API routes (no tenant context)
+	adminApiRoute := r.Group("/admin")
+	adminApiRoute.Use(middleware.AuthMiddleware())
+	{
+		adminApiRoute.POST("/tenants/onboard", tenantHandler.OnboardTenant)
+		adminApiRoute.GET("/tenants/:id", tenantHandler.GetTenant)
+		adminApiRoute.GET("/tenants/domain/:domain", tenantHandler.GetTenantByDomain)
 	}
 }

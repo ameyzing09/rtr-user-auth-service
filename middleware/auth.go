@@ -41,7 +41,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			Email:    claims.Email,
 			Role:     models.Role(claims.Role),
 		}
-		if tid := c.GetString(CtxTenantIDKey); tid != "" && tid != actor.TenantID {
+		if tid := c.GetString(CtxTenantIDKey); tid != "" && actor.Role != models.RoleSuperAdmin && tid != actor.TenantID {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access to this tenant is forbidden"})
 			return
 		}

@@ -65,7 +65,22 @@ type TenantRepository interface {
 	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
 }
 
+type TenantSettingRepository interface {
+	Get(ctx context.Context, tenantID string) (*models.TenantSetting, error)
+	PutReplace(ctx context.Context, ts *models.TenantSetting) error
+}
+
 type TenantSettingService interface {
-	Get(ctx context.Context, tenantID string) (map[string]interface{}, error)
-	PutReplace(ctx context.Context, tenantID string, cfg map[string]interface{}) (map[string]interface{}, error)
+	GetConfiguration(ctx context.Context, tenantID string) (map[string]interface{}, error)
+	UpdateConfiguration(ctx context.Context, tenantID string, config map[string]interface{}) (map[string]interface{}, error)
+	GetConfigurationValue(ctx context.Context, tenantID, key string) (interface{}, error)
+	SetConfigurationValue(ctx context.Context, tenantID, key string, value interface{}) error
+	RemoveConfigurationValue(ctx context.Context, tenantID, key string) error
+	ResetConfiguration(ctx context.Context, tenantID string) error
+}
+
+type TenantService interface {
+	Onboard(ctx context.Context, req TenantOnboardRequest) (TenantOnboardResult, error)
+	GetTenant(ctx context.Context, tenantID string) (*models.Tenant, error)
+	GetTenantByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 }

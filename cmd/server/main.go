@@ -26,14 +26,16 @@ func main() {
 
 	authService := services.NewAuthService(dbInstance, userRepo, tenantRepo)
 	tenantSettingService := services.NewTenantSettingService(tenantSettingRepo)
+	tenantService := services.NewTenantService(dbInstance, tenantRepo, userRepo, tenantSettingRepo)
 
 	userHandler := handlers.NewUserHandler(authService)
 	tenantSettingHandler := handlers.NewTenantSettingHandler(tenantSettingService)
+	tenantHandler := handlers.NewTenantHandler(tenantService)
 
 	router := gin.New()
 	router.Use(gin.Recovery(), middleware.CORS())
 
-	routes.RegisterRoutes(router, userHandler, tenantSettingHandler, tenantRepo)
+	routes.RegisterRoutes(router, userHandler, tenantSettingHandler, tenantHandler, tenantRepo)
 
 	if err := router.Run(":8082"); err != nil {
 		log.Fatalf("failed to start server: %v", err)

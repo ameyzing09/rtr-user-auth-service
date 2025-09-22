@@ -12,6 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ AuthService = (*authService)(nil) // suggested by claude sonnet 4 for early detection of interface implementation errors
+
 type authService struct {
 	db      *gorm.DB
 	users   UserRepository
@@ -19,7 +21,7 @@ type authService struct {
 }
 
 func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository) *authService {
-	return &authService{db: db, users: u, tenants: t}
+	return &authService{db: db, users: u, tenants: t}	
 }
 
 func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, UserRead, error) {
