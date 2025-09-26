@@ -1,0 +1,7 @@
+{
+  "name": "Acme Corporation",
+  "domain": "acme.com",
+  "admin_name": "Alice Admin",
+  "admin_email": "admin@acme.com",
+  "plan": "BASIC"
+}

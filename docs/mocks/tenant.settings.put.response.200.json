@@ -1,0 +1,16 @@
+{
+  "config": {
+    "password_policy": {
+      "min_length": 10,
+      "require_numbers": true,
+      "require_special": true
+    },
+    "features": {
+      "enable_sso": true
+    },
+    "branding": {
+      "company_name": "Acme Corp",
+      "logo_url": "https://cdn.acme.com/logo.png"
+    }
+  }
+}
