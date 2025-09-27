@@ -12,6 +12,7 @@ A multi-tenant user authentication and authorization service built with Go, Gin,
 - [Database Setup](#database-setup)
 - [API Documentation](#api-documentation)
 - [Permission System](#permission-system)
+- [Logging](#logging)
 - [Security](#security)
 - [Development](#development)
 - [Deployment](#deployment)
@@ -272,6 +273,54 @@ if !policy.Can(actor.Role, policy.ActionUserDelete) {
 ```
 
 For detailed permission matrix and implementation examples, see [docs/permissions.md](docs/permissions.md).
+
+## Logging
+
+The service implements a conditional logging system optimized for production performance:
+
+- **Development**: Full debug logging for troubleshooting
+- **Production**: Minimal logging overhead with essential information only
+- **Configurable**: Set `LOG_LEVEL` environment variable (debug, info, warn, error)
+- **Performance**: Debug logs are completely disabled in production
+
+### Quick Configuration
+
+```bash
+# Development (full logging)
+export LOG_LEVEL=debug
+
+# Production (optimized)
+export LOG_LEVEL=info
+export GIN_MODE=release
+```
+
+For detailed logging configuration and best practices, see [docs/logging.md](docs/logging.md).
+
+## Configuration
+
+### Environment Variables
+
+The service supports various environment variables for configuration:
+
+- **`LOG_LEVEL`**: Logging verbosity (debug, info, warn, error)
+- **`SLUG_SUGGESTION_SUFFIXES`**: Custom tenant slug suggestions (comma-separated)
+- **`JWT_SECRET`**: Secret key for JWT token signing
+- **`TENANT_CTX_SECRET`**: Secret for tenant context signatures
+
+### Slug Configuration
+
+Customize tenant slug suggestions per deployment environment:
+
+```bash
+# Default suffixes: -hq, -io, -team, -app, -co
+# Custom suffixes for enterprise deployment
+export SLUG_SUGGESTION_SUFFIXES="-corp,-inc,-ltd,-app"
+
+# Tech startup focused
+export SLUG_SUGGESTION_SUFFIXES="-tech,-labs,-studio,-works"
+```
+
+For detailed slug configuration options, see [docs/slug-configuration.md](docs/slug-configuration.md).
 
 ## Security
 

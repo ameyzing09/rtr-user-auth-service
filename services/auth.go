@@ -103,13 +103,13 @@ func (s *authService) CreateUser(ctx context.Context, tenantID string, actor Use
 	}
 
 	user := &models.User{
-		TenantID:            tenantID,
-		ID:                  uuid.NewString(),
-		Email:               email,
-		Name:                strings.TrimSpace(input.Name),
-		Role:                input.Role,
-		Password:            hashed,
-		ForcePasswordChange: true,
+		TenantID:           tenantID,
+		ID:                 uuid.NewString(),
+		Email:              email,
+		Name:               strings.TrimSpace(input.Name),
+		Role:               input.Role,
+		Password:           hashed,
+		ForcePasswordReset: true,
 	}
 
 	if err := s.users.Create(ctx, user); err != nil {
@@ -138,6 +138,6 @@ func (s *authService) ChangePassword(ctx context.Context, tenantID string, actor
 func toRead(u *models.User) UserRead {
 	return UserRead{
 		ID: u.ID, TenantID: u.TenantID, Name: u.Name, Email: u.Email,
-		Role: u.Role, MustChangePassword: u.ForcePasswordChange,
+		Role: u.Role, MustChangePassword: u.ForcePasswordReset,
 	}
 }

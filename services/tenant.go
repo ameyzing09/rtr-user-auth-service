@@ -157,14 +157,14 @@ func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, 
 		}
 
 		adminUser := &models.User{
-			ID:                  uuid.NewString(),
-			TenantID:            tenantID,
-			Email:               adminEmail,
-			Name:                adminName,
-			Role:                models.RoleAdmin,
-			Password:            hashedPassword,
-			IsOwner:             true,
-			ForcePasswordChange: true,
+			ID:                 uuid.NewString(),
+			TenantID:           tenantID,
+			Email:              adminEmail,
+			Name:               adminName,
+			Role:               models.RoleAdmin,
+			Password:           hashedPassword,
+			IsOwner:            true,
+			ForcePasswordReset: true,
 		}
 		if err := userRepo.Create(ctx, adminUser); err != nil {
 			return err

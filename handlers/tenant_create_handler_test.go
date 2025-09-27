@@ -160,7 +160,7 @@ func TestTenantCreateHandler_SuperAdminFlow(t *testing.T) {
 	if !adminUser.IsOwner {
 		t.Fatalf("expected admin user to be owner")
 	}
-	if !adminUser.ForcePasswordChange {
+	if !adminUser.ForcePasswordReset {
 		t.Fatalf("expected force password change true")
 	}
 
