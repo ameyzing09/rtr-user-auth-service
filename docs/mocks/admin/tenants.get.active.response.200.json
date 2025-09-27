@@ -1,0 +1,11 @@
+{
+  "id": "tnt-0000-1111-2222-333344445555",
+  "name": "Acme Corporation",
+  "domain": "acme.com",
+  "slug": "acme-corporation",
+  "plan": "STARTER",
+  "status": "ACTIVE",
+  "created_by": "u-superadmin-0000-1111-2222-333344445555",
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-16T08:15:00Z"
+}

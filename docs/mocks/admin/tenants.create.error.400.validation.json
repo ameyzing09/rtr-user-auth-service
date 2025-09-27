@@ -1,0 +1,3 @@
+{
+  "error": "name is required, admin_email must be a valid email, plan must be one of [BASIC, STARTER, GROWTH, ENTERPRISE, ON_PREM]"
+}

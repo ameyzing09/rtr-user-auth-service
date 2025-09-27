@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -42,29 +43,41 @@ var (
 func TenantContext(repo repositories.TenantRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		env := strings.ToLower(strings.TrimSpace(os.Getenv("ENV")))
-
+		if env == "" {
+			env = "local"
+		}
 		tenantIDHeader := strings.TrimSpace(c.GetHeader("X-Tenant-Id"))
 		domainHeader := strings.TrimSpace(c.GetHeader("X-Tenant-Domain"))
 		tsHeader := strings.TrimSpace(c.GetHeader("X-Tenant-Ts"))
 		sigHeader := strings.TrimSpace(c.GetHeader("X-Tenant-Sig"))
+
+		log.Printf("[TenantContext] Processing request: env=%s, tenantID=%s, domain=%s, hasSig=%t",
+			env, tenantIDHeader, domainHeader, sigHeader != "")
 
 		var tenant *models.Tenant
 		var err error
 		var resolvedTenantID string
 
 		if tenantIDHeader != "" || tsHeader != "" || sigHeader != "" {
+			log.Printf("[TenantContext] Using signed tenant context")
 			tenant, err = handleSignedTenantContext(c, repo, tenantIDHeader, domainHeader, tsHeader, sigHeader)
 			if err != nil {
+				log.Printf("[TenantContext] Signed context failed: %v", err)
 				return
 			}
 			resolvedTenantID = tenant.ID
 		} else {
+			log.Printf("[TenantContext] Using unsigned tenant context")
 			tenant, err = handleUnsignedTenantContext(c, repo, env, domainHeader)
 			if err != nil {
+				log.Printf("[TenantContext] Unsigned context failed: %v", err)
 				return
 			}
 			resolvedTenantID = tenant.ID
 		}
+
+		log.Printf("[TenantContext] Successfully resolved tenant: ID=%s, Name=%s, Domain=%s",
+			resolvedTenantID, tenant.Name, tenantDomainValue(tenant))
 
 		c.Set(CtxTenantIDKey, resolvedTenantID)
 		c.Set(CtxTenantKey, tenant)
@@ -73,76 +86,101 @@ func TenantContext(repo repositories.TenantRepository) gin.HandlerFunc {
 }
 
 func handleSignedTenantContext(c *gin.Context, repo repositories.TenantRepository, tenantID, domain, ts, sig string) (*models.Tenant, error) {
+	log.Printf("[SignedContext] Validating signed tenant context: tenantID=%s, domain=%s", tenantID, domain)
+
 	if tenantID == "" || ts == "" || sig == "" {
+		log.Printf("[SignedContext] Missing required headers: tenantID=%t, ts=%t, sig=%t",
+			tenantID != "", ts != "", sig != "")
 		abortWithError(c, http.StatusUnauthorized, "missing tenant signature headers")
 		return nil, errAborted
 	}
 
 	tsValue, err := strconv.ParseInt(ts, 10, 64)
 	if err != nil {
+		log.Printf("[SignedContext] Invalid timestamp format: %s, error: %v", ts, err)
 		abortWithError(c, http.StatusUnauthorized, "invalid tenant timestamp")
 		return nil, errAborted
 	}
 
 	nowMinutes := time.Now().UTC().Unix() / 60
 	if diff := minutesDiff(tsValue, nowMinutes); diff > 2 {
+		log.Printf("[SignedContext] Timestamp expired: diff=%d minutes", diff)
 		abortWithError(c, http.StatusUnauthorized, "tenant context expired")
 		return nil, errAborted
 	}
 
 	if !verifyTenantSignature(tenantID, domain, ts, sig) {
+		log.Printf("[SignedContext] Signature verification failed")
 		abortWithError(c, http.StatusUnauthorized, "invalid tenant signature")
 		return nil, errAborted
 	}
 
+	log.Printf("[SignedContext] Signature verified, looking up tenant by ID: %s", tenantID)
 	tenant, err := findTenantByID(c, repo, tenantID)
 	if err != nil {
 		return nil, errAborted
 	}
 
-	if domain != "" && !strings.EqualFold(domain, tenant.Domain) {
-		abortWithError(c, http.StatusForbidden, "tenant domain mismatch")
-		return nil, errAborted
+	if domain != "" {
+		tenantDomain := tenantDomainValue(tenant)
+		log.Printf("[SignedContext] Verifying domain match: expected=%s, actual=%s", domain, tenantDomain)
+		if tenantDomain == "" || !strings.EqualFold(domain, tenantDomain) {
+			log.Printf("[SignedContext] Domain mismatch: expected=%s, actual=%s", domain, tenantDomain)
+			abortWithError(c, http.StatusForbidden, "tenant domain mismatch")
+			return nil, errAborted
+		}
 	}
 
+	log.Printf("[SignedContext] Successfully validated signed context for tenant: %s", tenantID)
 	return tenant, nil
 }
 
 func handleUnsignedTenantContext(c *gin.Context, repo repositories.TenantRepository, env, headerDomain string) (*models.Tenant, error) {
+	log.Printf("[UnsignedContext] Resolving tenant from domain: env=%s, headerDomain=%s", env, headerDomain)
+
 	domain := ""
 	if headerDomain != "" && env == "local" {
+		log.Printf("[UnsignedContext] Using header domain in local env: %s", headerDomain)
 		domain = headerDomain
 	}
-
+	// print domain
+	log.Printf("[UnsignedContext] Resolved domain: %s", domain)
 	if domain == "" {
 		host := c.Request.Host
 		if idx := strings.Index(host, ":"); idx > -1 {
 			host = host[:idx]
 		}
 		domain = host
+		log.Printf("[UnsignedContext] Using request host as domain: %s", domain)
 	}
 
 	domain = strings.TrimSpace(domain)
 	if domain == "" {
+		log.Printf("[UnsignedContext] No domain resolved, aborting")
 		abortWithError(c, http.StatusBadRequest, "missing tenant context")
 		return nil, errAborted
 	}
 
+	log.Printf("[UnsignedContext] Looking up tenant by domain: %s", domain)
 	tenant, err := findTenantByDomain(c, repo, domain)
 	if err != nil {
 		return nil, errAborted
 	}
 
+	log.Printf("[UnsignedContext] Successfully resolved tenant from domain: %s -> %s", domain, tenant.ID)
 	return tenant, nil
 }
 
 func findTenantByID(c *gin.Context, repo repositories.TenantRepository, tenantID string) (*models.Tenant, error) {
 	if tenant := cacheGetByID(tenantID); tenant != nil {
+		log.Printf("[Cache] Cache HIT for tenant ID: %s", tenantID)
 		return tenant, nil
 	}
 
+	log.Printf("[Cache] Cache MISS for tenant ID: %s, querying database", tenantID)
 	tenant, err := repo.FindByID(c.Request.Context(), tenantID)
 	if err != nil {
+		log.Printf("[DB] Tenant lookup failed for ID %s: %v", tenantID, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			abortWithError(c, http.StatusNotFound, "tenant not found")
 		} else {
@@ -151,21 +189,26 @@ func findTenantByID(c *gin.Context, repo repositories.TenantRepository, tenantID
 		return nil, errAborted
 	}
 	if tenant == nil {
+		log.Printf("[DB] Tenant not found for ID: %s", tenantID)
 		abortWithError(c, http.StatusNotFound, "tenant not found")
 		return nil, errAborted
 	}
 
+	log.Printf("[DB] Found tenant by ID: %s -> %s", tenantID, tenant.Name)
 	cacheStore(tenant)
 	return tenant, nil
 }
 
 func findTenantByDomain(c *gin.Context, repo repositories.TenantRepository, domain string) (*models.Tenant, error) {
 	if tenant := cacheGetByDomain(domain); tenant != nil {
+		log.Printf("[Cache] Cache HIT for domain: %s", domain)
 		return tenant, nil
 	}
 
+	log.Printf("[Cache] Cache MISS for domain: %s, querying database", domain)
 	tenant, err := repo.FindByDomain(c.Request.Context(), domain)
 	if err != nil {
+		log.Printf("[DB] Tenant lookup failed for domain %s: %v", domain, err)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			abortWithError(c, http.StatusNotFound, "tenant not found")
 		} else {
@@ -174,10 +217,12 @@ func findTenantByDomain(c *gin.Context, repo repositories.TenantRepository, doma
 		return nil, errAborted
 	}
 	if tenant == nil {
+		log.Printf("[DB] Tenant not found for domain: %s", domain)
 		abortWithError(c, http.StatusNotFound, "tenant not found")
 		return nil, errAborted
 	}
 
+	log.Printf("[DB] Found tenant by domain: %s -> %s (%s)", domain, tenant.ID, tenant.Name)
 	cacheStore(tenant)
 	return tenant, nil
 }
@@ -221,8 +266,11 @@ func cacheStore(tenant *models.Tenant) {
 	entry := cachedTenant{tenant: tenant, exp: time.Now().Add(cacheTTL)}
 	tcCache.mu.Lock()
 	tcCache.byID[strings.ToLower(tenant.ID)] = entry
-	if tenant.Domain != "" {
-		tcCache.byDomain[strings.ToLower(tenant.Domain)] = entry
+	if d := tenantDomainValue(tenant); d != "" {
+		tcCache.byDomain[strings.ToLower(d)] = entry
+		log.Printf("[Cache] Stored tenant in cache: ID=%s, Domain=%s, TTL=%v", tenant.ID, d, cacheTTL)
+	} else {
+		log.Printf("[Cache] Stored tenant in cache: ID=%s, Domain=<none>, TTL=%v", tenant.ID, cacheTTL)
 	}
 	tcCache.mu.Unlock()
 }
@@ -256,4 +304,11 @@ func abortWithError(c *gin.Context, status int, msg string) {
 		msg = http.StatusText(status)
 	}
 	c.AbortWithStatusJSON(status, gin.H{"error": msg})
+}
+
+func tenantDomainValue(t *models.Tenant) string {
+	if t == nil || t.Domain == nil {
+		return ""
+	}
+	return *t.Domain
 }

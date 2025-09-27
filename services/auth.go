@@ -21,7 +21,7 @@ type authService struct {
 }
 
 func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository) *authService {
-	return &authService{db: db, users: u, tenants: t}	
+	return &authService{db: db, users: u, tenants: t}
 }
 
 func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, UserRead, error) {

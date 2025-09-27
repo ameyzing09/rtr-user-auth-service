@@ -1,0 +1,10 @@
+{
+  "tenant": {
+    "id": "tnt-0000-1111-2222-333344445556",
+    "name": "Tech Startup Inc",
+    "slug": "tech-startup-inc"
+  },
+  "admin_user_id": "u-admin-2222-3333-4444-bbbbbb",
+  "temp_password": "Start1234!",
+  "status": "PENDING"
+}

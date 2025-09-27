@@ -1,0 +1,8 @@
+{
+  "status": "FAILED",
+  "steps": [
+    "Tenant created",
+    "Admin user provisioned",
+    "Infrastructure provisioning failed"
+  ]
+}

@@ -2,160 +2,306 @@ package services
 
 import (
 	"context"
-	"rtr-user-auth-service/models"
-	"rtr-user-auth-service/utils"
+	"encoding/json"
+	"errors"
 	"strings"
+	"time"
 
+	"rtr-user-auth-service/domain"
+	"rtr-user-auth-service/eventbus"
+	"rtr-user-auth-service/models"
+	"rtr-user-auth-service/repositories"
+	"rtr-user-auth-service/utils"
+
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-type TenantOnboardRequest struct {
-	Name       string
-	Domain     string
-	AdminName  string
-	AdminEmail string
-	Plan       string
+type slugConflictError struct {
+	suggestions []string
 }
 
-type TenantOnboardResult struct {
-	TenantID     string
-	Domain       string
-	AdminUserID  string
-	TempPassword string // don't store this, just return it once
+func (e slugConflictError) Error() string {
+	return domain.ErrTenantSlugTaken.Error()
 }
 
-var _ TenantService = (*tenantService)(nil) // suggested by claude sonnet 4 for early detection of interface implementation errors
+func (e slugConflictError) Suggestions() []string {
+	return append([]string(nil), e.suggestions...)
+}
+
+var _ TenantService = (*tenantService)(nil)
 
 type tenantService struct {
-	db             *gorm.DB
-	tenants        TenantRepository
-	users          UserRepository
-	tenantSettings TenantSettingRepository
+	db              *gorm.DB
+	tenantRepo      TenantRepository
+	idempotencyRepo IdempotencyRepository
 }
 
-func NewTenantService(db *gorm.DB, tr TenantRepository, ur UserRepository, tsr TenantSettingRepository) *tenantService {
+func NewTenantService(db *gorm.DB, tr TenantRepository, idr IdempotencyRepository) *tenantService {
 	return &tenantService{
-		db:             db,
-		tenants:        tr,
-		users:          ur,
-		tenantSettings: tsr,
+		db:              db,
+		tenantRepo:      tr,
+		idempotencyRepo: idr,
 	}
 }
 
-func (s *tenantService) Onboard(ctx context.Context, req TenantOnboardRequest) (TenantOnboardResult, error) {
-	// Validate input
-	if err := s.validateOnboardRequest(req); err != nil {
-		return TenantOnboardResult{}, err
+func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, req TenantOnboardAsyncRequest, keyHash, requestHash string) (TenantOnboardAsyncResult, bool, error) {
+	if actor.Role != models.RoleSuperAdmin {
+		return TenantOnboardAsyncResult{}, false, domain.ErrSuperadminRequired
 	}
 
-	// Normalize inputs
-	domain := strings.ToLower(strings.TrimSpace(req.Domain))
-	adminEmail := strings.ToLower(strings.TrimSpace(req.AdminEmail))
+	normalizedName := strings.TrimSpace(req.Name)
+	if normalizedName == "" {
+		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
+	}
 
-	// Check if tenant already exists
-	exists, err := s.tenants.Exists(ctx, domain)
+	adminName := strings.TrimSpace(req.AdminName)
+	if adminName == "" {
+		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
+	}
+
+	if strings.TrimSpace(req.AdminEmail) == "" {
+		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
+	}
+
+	adminEmail, err := utils.NormalizeEmail(req.AdminEmail)
 	if err != nil {
-		return TenantOnboardResult{}, err
-	}
-	if exists {
-		return TenantOnboardResult{}, ErrTenantAlreadyExists
+		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
 	}
 
-	// Perform onboarding in a transaction
-	var result TenantOnboardResult
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		tenantID := uuid.NewString()
-
-		// Create tenant
-		tenant := &models.Tenant{
-			ID:     tenantID,
-			Name:   strings.TrimSpace(req.Name),
-			Domain: domain,
+	var domainPtr *string
+	if req.Domain != nil {
+		normalizedDomain, err := utils.NormalizeDomain(*req.Domain)
+		if err != nil {
+			return TenantOnboardAsyncResult{}, false, ErrInvalidInput
 		}
-		if err := tx.Create(tenant).Error; err != nil {
+		domainPtr = &normalizedDomain
+	}
+
+	slug, err := utils.NormalizeSlug(normalizedName)
+	if err != nil {
+		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
+	}
+
+	planPtr, err := normalizePlan(req.Plan)
+	if err != nil {
+		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
+	}
+
+	record, err := s.idempotencyRepo.UpsertAndGet(ctx, keyHash, requestHash)
+	if err != nil {
+		return TenantOnboardAsyncResult{}, false, err
+	}
+
+	if record.RequestHash != requestHash {
+		return TenantOnboardAsyncResult{}, false, domain.ErrIdempotencyKeyReuseDifferentReq
+	}
+
+	if record.Status == models.IdempotencyStatusSuccess && len(record.Response) > 0 {
+		var cached TenantOnboardAsyncResult
+		if unmarshalErr := json.Unmarshal(record.Response, &cached); unmarshalErr == nil {
+			return cached, true, nil
+		}
+	}
+
+	if domainPtr != nil {
+		if existing, err := s.tenantRepo.FindByDomain(ctx, *domainPtr); err == nil && existing != nil {
+			return TenantOnboardAsyncResult{}, false, domain.ErrDomainInUse
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return TenantOnboardAsyncResult{}, false, err
+		}
+	}
+
+	if existing, err := s.tenantRepo.FindBySlug(ctx, slug); err == nil && existing != nil {
+		suggestions := utils.SuggestSlugAlternatives(slug)
+		return TenantOnboardAsyncResult{}, false, slugConflictError{suggestions: suggestions}
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return TenantOnboardAsyncResult{}, false, err
+	}
+
+	var result TenantOnboardAsyncResult
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		tenantRepo := repositories.NewGormTenantRepo(tx)
+		userRepo := repositories.NewGormUserRepo(tx)
+		outboxRepo := repositories.NewGormOutboxRepo(tx)
+		bus := eventbus.NewOutboxBus(outboxRepo)
+
+		tenantID := uuid.NewString()
+		slugCopy := slug
+		tenant := &models.Tenant{
+			ID:        tenantID,
+			Name:      normalizedName,
+			Slug:      &slugCopy,
+			Status:    models.TenantPending,
+			CreatedBy: &actor.ID,
+		}
+		if domainPtr != nil {
+			tenant.Domain = domainPtr
+		}
+		if planPtr != nil {
+			tenant.Plan = planPtr
+		}
+
+		if err := tenantRepo.Create(ctx, tenant); err != nil {
 			return err
 		}
 
-		// Generate credentials for admin user
-		adminUserID := uuid.NewString()
 		tempPassword, err := utils.GenerateTempPassword()
 		if err != nil {
 			return err
 		}
-
 		hashedPassword, err := utils.HashPassword(tempPassword)
 		if err != nil {
 			return err
 		}
 
-		// Create admin user
 		adminUser := &models.User{
-			ID:                  adminUserID,
+			ID:                  uuid.NewString(),
 			TenantID:            tenantID,
 			Email:               adminEmail,
-			Name:                strings.TrimSpace(req.AdminName),
+			Name:                adminName,
 			Role:                models.RoleAdmin,
 			Password:            hashedPassword,
+			IsOwner:             true,
 			ForcePasswordChange: true,
 		}
-		if err := s.users.Create(ctx, adminUser); err != nil {
+		if err := userRepo.Create(ctx, adminUser); err != nil {
 			return err
 		}
 
-		// Initialize tenant settings
-		tenantSetting := &models.TenantSetting{
-			TenantID: tenantID,
-			Config:   models.JSONMap{"plan": req.Plan},
+		eventPayload := eventbus.TenantCreatedV1{
+			V:             1,
+			TenantID:      tenantID,
+			Name:          tenant.Name,
+			Plan:          string(defaultPlanValue(planPtr)),
+			CreatorUserID: actor.ID,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
 		}
-		if err := s.tenantSettings.PutReplace(ctx, tenantSetting); err != nil {
+		if domainPtr != nil {
+			eventPayload.Domain = *domainPtr
+		}
+		if err := bus.PublishTenantCreated(ctx, eventPayload); err != nil {
 			return err
 		}
 
-		// Set result for return
-		result = TenantOnboardResult{
+		result = TenantOnboardAsyncResult{
 			TenantID:     tenantID,
-			Domain:       domain,
-			AdminUserID:  adminUserID,
+			Name:         tenant.Name,
+			Domain:       tenant.Domain,
+			Slug:         tenant.Slug,
+			AdminUserID:  adminUser.ID,
 			TempPassword: tempPassword,
+			Status:       tenant.Status,
 		}
 		return nil
 	})
 
 	if err != nil {
-		return TenantOnboardResult{}, err
+		var mysqlErr *mysqlDriver.MySQLError
+		if errors.As(err, &mysqlErr) {
+			switch mysqlErr.Number {
+			case 1062:
+				if strings.Contains(mysqlErr.Message, "ux_tenants_slug") {
+					suggestions := utils.SuggestSlugAlternatives(slug)
+					return TenantOnboardAsyncResult{}, false, slugConflictError{suggestions: suggestions}
+				}
+				if strings.Contains(mysqlErr.Message, "ux_tenants_domain") {
+					return TenantOnboardAsyncResult{}, false, domain.ErrDomainInUse
+				}
+				if strings.Contains(mysqlErr.Message, "ux_users_tenant_email") {
+					return TenantOnboardAsyncResult{}, false, domain.ErrEmailInUse
+				}
+			}
+		}
+		return TenantOnboardAsyncResult{}, false, err
 	}
 
-	return result, nil
+	responsePayload := map[string]interface{}{
+		"tenant": map[string]interface{}{
+			"id":   result.TenantID,
+			"name": result.Name,
+		},
+		"admin_user_id": result.AdminUserID,
+		"temp_password": result.TempPassword,
+		"status":        string(result.Status),
+	}
+	if result.Domain != nil {
+		responsePayload["tenant"].(map[string]interface{})["domain"] = *result.Domain
+	}
+	if result.Slug != nil {
+		responsePayload["tenant"].(map[string]interface{})["slug"] = *result.Slug
+	}
+
+	if err := s.idempotencyRepo.SaveResult(ctx, keyHash, models.IdempotencyStatusSuccess, responsePayload); err != nil {
+		return result, false, err
+	}
+
+	return result, false, nil
 }
 
 func (s *tenantService) GetTenant(ctx context.Context, tenantID string) (*models.Tenant, error) {
-	if tenantID == "" {
+	if strings.TrimSpace(tenantID) == "" {
 		return nil, ErrInvalidInput
 	}
-	return s.tenants.FindByID(ctx, tenantID)
+	tenant, err := s.tenantRepo.FindByID(ctx, tenantID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, domain.ErrTenantNotFound
+		}
+		return nil, err
+	}
+	return tenant, nil
 }
 
-func (s *tenantService) GetTenantByDomain(ctx context.Context, domain string) (*models.Tenant, error) {
-	if domain == "" {
+func (s *tenantService) GetTenantStatus(ctx context.Context, tenantID string) (TenantStatusView, error) {
+	tenant, err := s.GetTenant(ctx, tenantID)
+	if err != nil {
+		return TenantStatusView{}, err
+	}
+	return TenantStatusView{Status: tenant.Status, Steps: []string{}}, nil
+}
+
+func (s *tenantService) RetryProvisioning(ctx context.Context, actor UserRead, tenantID string) error {
+	if actor.Role != models.RoleSuperAdmin {
+		return domain.ErrSuperadminRequired
+	}
+	tenant, err := s.GetTenant(ctx, tenantID)
+	if err != nil {
+		return err
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		outboxRepo := repositories.NewGormOutboxRepo(tx)
+		bus := eventbus.NewOutboxBus(outboxRepo)
+		return bus.PublishTenantCreated(ctx, eventbus.TenantCreatedV1{
+			V:             1,
+			TenantID:      tenant.ID,
+			Name:          tenant.Name,
+			Plan:          string(defaultPlanValue(tenant.Plan)),
+			CreatorUserID: actor.ID,
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+}
+
+func normalizePlan(plan *models.Plan) (*models.Plan, error) {
+	if plan == nil {
+		value := models.PlanStarter
+		return &value, nil
+	}
+
+	switch *plan {
+	case models.PlanBasic, models.PlanStarter, models.PlanGrowth, models.PlanEnterprise, models.PlanOnPrem:
+		return plan, nil
+	default:
 		return nil, ErrInvalidInput
 	}
-	normalizedDomain := strings.ToLower(strings.TrimSpace(domain))
-	return s.tenants.FindByDomain(ctx, normalizedDomain)
 }
 
-func (s *tenantService) validateOnboardRequest(req TenantOnboardRequest) error {
-	if strings.TrimSpace(req.Name) == "" {
-		return ErrInvalidInput
+func defaultPlanValue(plan *models.Plan) models.Plan {
+	if plan == nil {
+		return models.PlanStarter
 	}
-	if strings.TrimSpace(req.Domain) == "" {
-		return ErrInvalidInput
-	}
-	if strings.TrimSpace(req.AdminName) == "" {
-		return ErrInvalidInput
-	}
-	if strings.TrimSpace(req.AdminEmail) == "" {
-		return ErrInvalidInput
-	}
-	return nil
+	return *plan
 }
