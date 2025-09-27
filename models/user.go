@@ -15,7 +15,7 @@ type User struct {
 	Password            string    `gorm:"type:char(60);not null" json:"-"`
 	Role                Role      `gorm:"type:ENUM('SUPERADMIN','ADMIN','HR','INTERVIEWER','CANDIDATE');not null;default:'CANDIDATE'"`
 	IsOwner             bool      `gorm:"not null;default:false"`
-	ForcePasswordChange bool      `gorm:"column:force_password_reset;not null;default:false"`
+	ForcePasswordReset  bool      `gorm:"column:force_password_reset;not null;default:false"`
 	CreatedAt           time.Time `gorm:"not null;default:CURRENT_TIMESTAMP"`
 	UpdatedAt           time.Time `gorm:"not null;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
 

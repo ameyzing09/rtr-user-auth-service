@@ -34,8 +34,12 @@ func AuthMiddleware() gin.HandlerFunc {
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 			return []byte(secret), nil
 		})
-		// print token and err
-		log.Printf("[AuthMiddleware] Parsed token: %+v", token)
+		// print token validity and non-sensitive claims
+		if token != nil && token.Valid {
+			log.Printf("[AuthMiddleware] Token valid: true, userID=%s tenantID=%s role=%s", claims.UserID, claims.TenantID, claims.Role)
+		} else {
+			log.Printf("[AuthMiddleware] Token valid: false")
+		}
 		log.Printf("[AuthMiddleware] Parse error: %v", err)
 
 		if err != nil || !token.Valid {

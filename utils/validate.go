@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+// Validates lowercase domain names with the following rules:
+// - Only lowercase letters (a-z), digits (0-9), and hyphens (-) are allowed.
+// - Hyphens cannot appear at the start or end of a label, only in the middle.
+// - Domain must consist of at least two labels separated by dots.
+// - Each label must start and end with an alphanumeric character.
 var domainPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$`)
 
 func NormalizeEmail(email string) (string, error) {
