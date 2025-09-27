@@ -8,9 +8,11 @@ import (
 )
 
 type TenantRepository interface {
-	Exists(ctx context.Context, tenantID string) (bool, error)
+	Create(ctx context.Context, tenant *models.Tenant) error
+	Update(ctx context.Context, tenant *models.Tenant) error
+	FindByID(ctx context.Context, id string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
-	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
+	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
 }
 
 type GormTenantRepo struct {
@@ -21,34 +23,34 @@ func NewGormTenantRepo(db *gorm.DB) *GormTenantRepo {
 	return &GormTenantRepo{db: db}
 }
 
-func (r *GormTenantRepo) Exists(ctx context.Context, tenantID string) (bool, error) {
-	var count int64
-	if err := r.db.WithContext(ctx).
-		Model(&models.Tenant{}).
-		Where("id = ?", tenantID).
-		Count(&count).
-		Error; err != nil {
-		return false, err
+func (r *GormTenantRepo) Create(ctx context.Context, tenant *models.Tenant) error {
+	return r.db.WithContext(ctx).Create(tenant).Error
+}
+
+func (r *GormTenantRepo) Update(ctx context.Context, tenant *models.Tenant) error {
+	return r.db.WithContext(ctx).Save(tenant).Error
+}
+
+func (r *GormTenantRepo) FindByID(ctx context.Context, id string) (*models.Tenant, error) {
+	var tenant models.Tenant
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&tenant).Error; err != nil {
+		return nil, err
 	}
-	return count > 0, nil
+	return &tenant, nil
 }
 
 func (r *GormTenantRepo) FindByDomain(ctx context.Context, domain string) (*models.Tenant, error) {
-	var t models.Tenant
-	if err := r.db.WithContext(ctx).
-		Where("domain = ?", domain).
-		First(&t).Error; err != nil {
+	var tenant models.Tenant
+	if err := r.db.WithContext(ctx).Where("domain = ?", domain).First(&tenant).Error; err != nil {
 		return nil, err
 	}
-	return &t, nil
+	return &tenant, nil
 }
 
-func (r *GormTenantRepo) FindByID(ctx context.Context, tenantID string) (*models.Tenant, error) {
-	var t models.Tenant
-	if err := r.db.WithContext(ctx).
-		Where("id = ?", tenantID).
-		First(&t).Error; err != nil {
+func (r *GormTenantRepo) FindBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
+	var tenant models.Tenant
+	if err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&tenant).Error; err != nil {
 		return nil, err
 	}
-	return &t, nil
+	return &tenant, nil
 }

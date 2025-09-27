@@ -1,0 +1,19 @@
+-- tenants: async lifecycle + slug
+UPDATE tenants
+SET plan = 'BASIC'
+WHERE plan IS NULL OR plan NOT IN ('BASIC','STARTER','GROWTH','ENTERPRISE','ON_PREM');
+
+ALTER TABLE tenants
+  MODIFY COLUMN domain VARCHAR(255) NULL,
+  ADD COLUMN slug VARCHAR(50) NULL AFTER domain,
+  ADD UNIQUE KEY ux_tenants_slug (slug),
+  MODIFY COLUMN plan ENUM('BASIC','STARTER','GROWTH','ENTERPRISE','ON_PREM') NULL AFTER slug,
+  ADD COLUMN status ENUM('PENDING','PROVISIONING','AWAITING_BRANDING','ACTIVE','FAILED','SUSPENDED','DELETED') NOT NULL DEFAULT 'PENDING' AFTER plan,
+  ADD COLUMN created_by CHAR(36) NULL AFTER status,
+  ADD COLUMN failed_reason TEXT NULL AFTER created_by;
+
+CREATE INDEX idx_tenants_status ON tenants (status);
+CREATE INDEX idx_tenants_plan ON tenants (plan);
+
+ALTER TABLE users
+  ADD COLUMN is_owner BOOLEAN NOT NULL DEFAULT FALSE AFTER role;

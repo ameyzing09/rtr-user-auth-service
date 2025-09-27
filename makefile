@@ -73,3 +73,13 @@ env-print:
 	@echo "DB_PASSWORD=$(if $(filter secret,$(DB_PASSWORD)),****,$(DB_PASSWORD))"
 	@echo "MIGRATIONS_DIR=$(MIGRATIONS_DIR)"
 	@echo "Using MYSQL_DSN? $${MYSQL_DSN:+yes}{${MYSQL_DSN:=""}}"
+
+## Run development server with hot reload using air
+dev:
+	@echo "==> Starting development server with hot reload"
+	air
+
+## Run server manually (without hot reload)
+run:
+	@echo "==> Starting server manually"
+	go run ./cmd/server/main.go

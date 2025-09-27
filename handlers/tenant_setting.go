@@ -28,7 +28,7 @@ func (h *TenantSettingHandler) Get(c *gin.Context) {
 		return
 	}
 
-	cfg, err := h.tenantSettingService.Get(c, tenantID)
+	cfg, err := h.tenantSettingService.GetConfiguration(c, tenantID)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
@@ -54,7 +54,7 @@ func (h *TenantSettingHandler) Put(c *gin.Context) {
 		return
 	}
 
-	cfg, err := h.tenantSettingService.PutReplace(c, tenantID, payload.Config)
+	cfg, err := h.tenantSettingService.UpdateConfiguration(c, tenantID, payload.Config)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return

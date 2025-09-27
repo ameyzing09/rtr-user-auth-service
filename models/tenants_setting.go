@@ -8,5 +8,5 @@ type TenantSetting struct {
 }
 
 func (TenantSetting) TableName() string {
-	return "tenants_settings"
+	return "tenant_settings"
 }

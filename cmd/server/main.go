@@ -17,23 +17,26 @@ func main() {
 	if gm := os.Getenv("GIN_MODE"); gm != "" {
 		gin.SetMode(gm)
 	}
-
 	dbInstance := db.InitDB()
-
+	
 	userRepo := repositories.NewGormUserRepo(dbInstance)
 	tenantRepo := repositories.NewGormTenantRepo(dbInstance)
 	tenantSettingRepo := repositories.NewGormTenantSettingRepo(dbInstance)
-
+	idempotencyRepo := repositories.NewGormIdempotencyRepo(dbInstance)
+	
 	authService := services.NewAuthService(dbInstance, userRepo, tenantRepo)
 	tenantSettingService := services.NewTenantSettingService(tenantSettingRepo)
-
+	tenantService := services.NewTenantService(dbInstance, tenantRepo, idempotencyRepo)
+	
 	userHandler := handlers.NewUserHandler(authService)
 	tenantSettingHandler := handlers.NewTenantSettingHandler(tenantSettingService)
-
+	tenantAdminHandler := handlers.NewTenantCreateHandler(tenantService)
+	
 	router := gin.New()
+	router.Use(middleware.CORS())
 	router.Use(gin.Recovery(), middleware.CORS())
 
-	routes.RegisterRoutes(router, userHandler, tenantSettingHandler, tenantRepo)
+	routes.RegisterRoutes(router, userHandler, tenantSettingHandler, tenantAdminHandler, tenantRepo)
 
 	if err := router.Run(":8082"); err != nil {
 		log.Fatalf("failed to start server: %v", err)

@@ -1,0 +1,11 @@
+{
+  "tenant": {
+    "id": "tnt-0000-1111-2222-333344445557",
+    "name": "Default Plan Corp",
+    "domain": "default.com",
+    "slug": "default-plan-corp"
+  },
+  "admin_user_id": "u-admin-3333-4444-5555-cccccc",
+  "temp_password": "Start1234!",
+  "status": "PENDING"
+}

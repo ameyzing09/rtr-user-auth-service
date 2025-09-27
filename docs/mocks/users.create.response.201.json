@@ -1,0 +1,11 @@
+{
+  "user": {
+    "ID": "u-3333-4444-5555-cccccc",
+    "TenantID": "tnt-0000-1111-2222-333344445555",
+    "Name": "New User",
+    "Email": "newuser@acme.com",
+    "Role": "INTERVIEWER",
+    "MustChangePassword": true
+  },
+  "temporary_password": "TempP@ssw0rd123"
+}

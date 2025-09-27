@@ -1,0 +1,4 @@
+{
+  "code": "IDEMPOTENCY_KEY_REUSE_DIFFERENT_REQUEST",
+  "message": "idempotency key reuse with different request"
+}

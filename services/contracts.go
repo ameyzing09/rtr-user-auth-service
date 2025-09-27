@@ -60,12 +60,62 @@ type UserRepository interface {
 }
 
 type TenantRepository interface {
-	Exists(ctx context.Context, tenantID string) (bool, error)
-	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+	Create(ctx context.Context, tenant *models.Tenant) error
+	Update(ctx context.Context, tenant *models.Tenant) error
 	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
+	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
+	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
+}
+
+type TenantSettingRepository interface {
+	Get(ctx context.Context, tenantID string) (*models.TenantSetting, error)
+	PutReplace(ctx context.Context, ts *models.TenantSetting) error
+}
+
+type OutboxRepository interface {
+	Append(ctx context.Context, aggregateType, aggregateID, eventType string, payload map[string]interface{}) error
+}
+
+type IdempotencyRepository interface {
+	UpsertAndGet(ctx context.Context, keyHash, requestHash string) (*models.IdempotencyKey, error)
+	SaveResult(ctx context.Context, keyHash string, status models.IdempotencyStatus, response map[string]interface{}) error
 }
 
 type TenantSettingService interface {
-	Get(ctx context.Context, tenantID string) (map[string]interface{}, error)
-	PutReplace(ctx context.Context, tenantID string, cfg map[string]interface{}) (map[string]interface{}, error)
+	GetConfiguration(ctx context.Context, tenantID string) (map[string]interface{}, error)
+	UpdateConfiguration(ctx context.Context, tenantID string, config map[string]interface{}) (map[string]interface{}, error)
+	GetConfigurationValue(ctx context.Context, tenantID, key string) (interface{}, error)
+	SetConfigurationValue(ctx context.Context, tenantID, key string, value interface{}) error
+	RemoveConfigurationValue(ctx context.Context, tenantID, key string) error
+	ResetConfiguration(ctx context.Context, tenantID string) error
+}
+
+type TenantOnboardAsyncRequest struct {
+	Name       string
+	Domain     *string
+	AdminName  string
+	AdminEmail string
+	Plan       *models.Plan
+}
+
+type TenantOnboardAsyncResult struct {
+	TenantID     string
+	Name         string
+	Domain       *string
+	Slug         *string
+	AdminUserID  string
+	TempPassword string
+	Status       models.TenantStatus
+}
+
+type TenantStatusView struct {
+	Status models.TenantStatus
+	Steps  []string
+}
+
+type TenantService interface {
+	OnboardTenantAsync(ctx context.Context, actor UserRead, req TenantOnboardAsyncRequest, keyHash, requestHash string) (TenantOnboardAsyncResult, bool, error)
+	GetTenant(ctx context.Context, tenantID string) (*models.Tenant, error)
+	GetTenantStatus(ctx context.Context, tenantID string) (TenantStatusView, error)
+	RetryProvisioning(ctx context.Context, actor UserRead, tenantID string) error
 }

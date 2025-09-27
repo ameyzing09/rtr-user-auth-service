@@ -1,0 +1,14 @@
+{
+  "config": {
+    "allowed_domains": ["acme.com", "acme.co"],
+    "password_policy": {
+      "min_length": 8,
+      "require_numbers": true,
+      "require_special": false
+    },
+    "features": {
+      "enable_sso": false,
+      "enable_signup": true
+    }
+  }
+}

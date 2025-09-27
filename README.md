@@ -11,6 +11,8 @@ A multi-tenant user authentication and authorization service built with Go, Gin,
 - [Configuration](#configuration)
 - [Database Setup](#database-setup)
 - [API Documentation](#api-documentation)
+- [Permission System](#permission-system)
+- [Logging](#logging)
 - [Security](#security)
 - [Development](#development)
 - [Deployment](#deployment)
@@ -237,6 +239,89 @@ X-Tenant-Id: 123e4567-e89b-12d3-a456-426614174000
 }
 ```
 
+## Permission System
+
+The service implements a comprehensive server-side permission system with role-based access control (RBAC). The backend is the source of truth for all permissions - UI elements may be hidden, but server validation is always enforced.
+
+### Roles
+
+- **SUPERADMIN**: Full system access, can manage tenants and bypass tenant boundaries on control-plane routes only
+- **ADMIN**: Tenant-level administrator, can manage users and tenant settings  
+- **HR**: Human resources role, can list and create users, view tenant settings
+- **INTERVIEWER**: Limited access, can only manage their own profile
+- **CANDIDATE**: Limited access, can only manage their own profile
+
+### Route Protection
+
+- **Public Routes**: No authentication required (login, public tenant settings)
+- **Protected Routes**: Require authentication + tenant context + role permissions
+- **Admin Routes**: Require SUPERADMIN role, no tenant context (control-plane operations)
+
+### Permission Enforcement
+
+The system uses middleware-based role gates and policy-based action checking:
+
+```go
+// Role-based route protection
+admin.POST("/tenant/create", middleware.RequireRole(models.RoleSuperAdmin), handler.Create)
+protected.GET("/users", middleware.RequireAny(models.RoleAdmin, models.RoleHR), handler.ListUsers)
+
+// Policy-based action checking
+if !policy.Can(actor.Role, policy.ActionUserDelete) {
+    return 403 Forbidden
+}
+```
+
+For detailed permission matrix and implementation examples, see [docs/permissions.md](docs/permissions.md).
+
+## Logging
+
+The service implements a conditional logging system optimized for production performance:
+
+- **Development**: Full debug logging for troubleshooting
+- **Production**: Minimal logging overhead with essential information only
+- **Configurable**: Set `LOG_LEVEL` environment variable (debug, info, warn, error)
+- **Performance**: Debug logs are completely disabled in production
+
+### Quick Configuration
+
+```bash
+# Development (full logging)
+export LOG_LEVEL=debug
+
+# Production (optimized)
+export LOG_LEVEL=info
+export GIN_MODE=release
+```
+
+For detailed logging configuration and best practices, see [docs/logging.md](docs/logging.md).
+
+## Configuration
+
+### Environment Variables
+
+The service supports various environment variables for configuration:
+
+- **`LOG_LEVEL`**: Logging verbosity (debug, info, warn, error)
+- **`SLUG_SUGGESTION_SUFFIXES`**: Custom tenant slug suggestions (comma-separated)
+- **`JWT_SECRET`**: Secret key for JWT token signing
+- **`TENANT_CTX_SECRET`**: Secret for tenant context signatures
+
+### Slug Configuration
+
+Customize tenant slug suggestions per deployment environment:
+
+```bash
+# Default suffixes: -hq, -io, -team, -app, -co
+# Custom suffixes for enterprise deployment
+export SLUG_SUGGESTION_SUFFIXES="-corp,-inc,-ltd,-app"
+
+# Tech startup focused
+export SLUG_SUGGESTION_SUFFIXES="-tech,-labs,-studio,-works"
+```
+
+For detailed slug configuration options, see [docs/slug-configuration.md](docs/slug-configuration.md).
+
 ## Security
 
 ### Tenant Context Validation
@@ -276,7 +361,17 @@ The service validates tenant context using HMAC-SHA256 signatures:
    ```
 
 3. **Start the application**
+
+   **For development with hot reload:**
    ```bash
+   make dev
+   ```
+   This uses `air` to automatically restart the server when Go files change.
+
+   **For manual runs:**
+   ```bash
+   make run
+   # or
    go run cmd/server/main.go
    ```
 

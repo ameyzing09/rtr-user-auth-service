@@ -12,13 +12,13 @@ type User struct {
 	TenantID            string    `gorm:"type:char(36);not null;index:idx_users_tenants,priority:1"`
 	Name                string    `gorm:"type:varchar(150);not null"`
 	Email               string    `gorm:"type:varchar(190);not null;uniqueIndex:ux_users_tenant_email,priority:2"`
-	Password            string    `gorm:"type:char(60);not null" json:"-"` // bcrypt hash
-	Role                Role      `gorm:"type:ENUM('ADMIN','HR','INTERVIEWER','CANDIDATE');not null;default:'CANDIDATE'"`
-	ForcePasswordChange bool      `gorm:"not null;default:false"`
+	Password            string    `gorm:"type:char(60);not null" json:"-"`
+	Role                Role      `gorm:"type:ENUM('SUPERADMIN','ADMIN','HR','INTERVIEWER','CANDIDATE');not null;default:'CANDIDATE'"`
+	IsOwner             bool      `gorm:"not null;default:false"`
+	ForcePasswordReset  bool      `gorm:"column:force_password_reset;not null;default:false"`
 	CreatedAt           time.Time `gorm:"not null;default:CURRENT_TIMESTAMP"`
 	UpdatedAt           time.Time `gorm:"not null;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
 
-	// relations
 	Tenant Tenant `gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;foreignKey:TenantID;references:ID"`
 }
 
@@ -29,5 +29,4 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// composite unique on (tenant_id, email)
 func (User) TableName() string { return "users" }

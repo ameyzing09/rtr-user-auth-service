@@ -24,14 +24,40 @@ type stubTenantRepo struct {
 
 var _ repositories.TenantRepository = (*stubTenantRepo)(nil)
 
-func (s *stubTenantRepo) Exists(ctx context.Context, tenantID string) (bool, error) {
-	_, ok := s.tenants[tenantID]
-	return ok, nil
+func strPtr(value string) *string {
+	return &value
+}
+
+func (s *stubTenantRepo) Create(ctx context.Context, tenant *models.Tenant) error {
+	if s.tenants == nil {
+		s.tenants = make(map[string]*models.Tenant)
+	}
+	copy := *tenant
+	s.tenants[tenant.ID] = &copy
+	return nil
+}
+
+func (s *stubTenantRepo) Update(ctx context.Context, tenant *models.Tenant) error {
+	if s.tenants == nil {
+		s.tenants = make(map[string]*models.Tenant)
+	}
+	copy := *tenant
+	s.tenants[tenant.ID] = &copy
+	return nil
+}
+
+func (s *stubTenantRepo) FindBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
+	for _, tenant := range s.tenants {
+		if tenant.Slug != nil && *tenant.Slug == slug {
+			return tenant, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
 }
 
 func (s *stubTenantRepo) FindByDomain(ctx context.Context, domain string) (*models.Tenant, error) {
 	for _, tenant := range s.tenants {
-		if tenant.Domain == domain {
+		if tenant.Domain != nil && *tenant.Domain == domain {
 			return tenant, nil
 		}
 	}
@@ -71,7 +97,7 @@ func TestTenantContext_SignedHeadersCurrentSecret(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "secret-current")
@@ -103,7 +129,7 @@ func TestTenantContext_SignedHeadersCurrentSecret(t *testing.T) {
 		t.Fatalf("tenant missing in context")
 	}
 	tenant, ok := tenantVal.(*models.Tenant)
-	if !ok || tenant.Domain != "acme.test" {
+	if !ok || tenant.Domain == nil || *tenant.Domain != "acme.test" {
 		t.Fatalf("unexpected tenant payload: %#v", tenantVal)
 	}
 }
@@ -112,7 +138,7 @@ func TestTenantContext_SignedHeadersPreviousSecret(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "secret-current")
@@ -142,7 +168,7 @@ func TestTenantContext_InvalidSignature(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "secret-current")
@@ -172,7 +198,7 @@ func TestTenantContext_ExpiredSignature(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "secret-current")
@@ -202,7 +228,7 @@ func TestTenantContext_HostFallback(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "")
@@ -229,7 +255,7 @@ func TestTenantContext_LocalUnsignedDomain(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "")
@@ -254,7 +280,7 @@ func TestTenantContext_MismatchedDomain(t *testing.T) {
 	resetTenantCache()
 
 	repo := &stubTenantRepo{tenants: map[string]*models.Tenant{
-		"tenant-1": {ID: "tenant-1", Domain: "acme.test"},
+		"tenant-1": {ID: "tenant-1", Domain: strPtr("acme.test")},
 	}}
 
 	t.Setenv("TENANT_CTX_SECRET", "secret-current")

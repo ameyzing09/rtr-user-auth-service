@@ -1,0 +1,18 @@
+[
+  {
+    "ID": "u-1111-2222-3333-aaaaaa",
+    "TenantID": "tnt-0000-1111-2222-333344445555",
+    "Name": "Alice Johnson",
+    "Email": "alice@acme.com",
+    "Role": "ADMIN",
+    "MustChangePassword": false
+  },
+  {
+    "ID": "u-2222-2222-3333-bbbbbb",
+    "TenantID": "tnt-0000-1111-2222-333344445555",
+    "Name": "Bob Smith",
+    "Email": "bob@acme.com",
+    "Role": "HR",
+    "MustChangePassword": true
+  }
+]

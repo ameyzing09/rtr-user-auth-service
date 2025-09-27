@@ -1,0 +1,10 @@
+{
+  "status": "ACTIVE",
+  "steps": [
+    "Tenant created",
+    "Admin user provisioned",
+    "Infrastructure provisioned",
+    "Branding configured",
+    "Tenant activated"
+  ]
+}

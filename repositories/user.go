@@ -7,6 +7,15 @@ import (
 	"gorm.io/gorm"
 )
 
+type UserRepository interface {
+	EmailExists(ctx context.Context, tenantID, email string) (bool, error)
+	Create(ctx context.Context, u *models.User) error
+	FindByEmail(ctx context.Context, email string) (*models.User, error)
+	FindByID(ctx context.Context, tenantID, userID string) (*models.User, error)
+	ListByTenant(ctx context.Context, tenantID string) ([]models.User, error)
+	UpdatePassword(ctx context.Context, tenantID, userID, hashedPassword string, clearForce bool) error
+}
+
 type GormUserRepo struct {
 	db *gorm.DB
 }
@@ -18,6 +27,7 @@ func NewGormUserRepo(db *gorm.DB) *GormUserRepo {
 func (r *GormUserRepo) EmailExists(ctx context.Context, tenantID, email string) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).
+		Model(&models.User{}).
 		Where("tenant_id = ? AND email = ?", tenantID, email).
 		Count(&count).Error; err != nil {
 		return false, err
@@ -62,15 +72,16 @@ func (r *GormUserRepo) ListByTenant(ctx context.Context, tenantID string) ([]mod
 	return users, nil
 }
 
-func (r *GormUserRepo) UpdatePassword(ctx context.Context, tenantID, userID, newHashedPassword string, forceChange bool) error {
+func (r *GormUserRepo) UpdatePassword(ctx context.Context, tenantID, userID, newHashedPassword string, clearForce bool) error {
 	q := r.db.WithContext(ctx).
 		Model(&models.User{}).
 		Where("id = ? AND tenant_id = ?", userID, tenantID)
 
-	if forceChange {
+	if clearForce {
 		return q.Updates(map[string]interface{}{
-			"password":              newHashedPassword,
-			"force_password_change": false}).Error
+			"password":             newHashedPassword,
+			"force_password_reset": false,
+		}).Error
 	}
 	return q.Update("password", newHashedPassword).Error
 }

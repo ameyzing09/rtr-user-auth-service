@@ -1,0 +1,9 @@
+{
+  "code": "TENANT_SLUG_TAKEN",
+  "message": "tenant slug already taken",
+  "suggestions": [
+    "acme-corporation-hq",
+    "acme-corporation-io",
+    "acme-corporation-team"
+  ]
+}
