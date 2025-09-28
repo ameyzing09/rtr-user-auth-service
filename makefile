@@ -83,3 +83,9 @@ dev:
 run:
 	@echo "==> Starting server manually"
 	go run ./cmd/server/main.go
+
+## Install air for hot-reload development
+air-install:
+	@echo "==> Installing Air for hot-reload development"
+	go install github.com/air-verse/air@v1.61.5
+	@echo "Air installed. Run 'make dev' to start with hot-reload."
