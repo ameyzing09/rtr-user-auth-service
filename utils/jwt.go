@@ -1,8 +1,10 @@
 package utils
 
 import (
-	"os"
+	"fmt"
 	"time"
+
+	"rtr-user-auth-service/config"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -16,10 +18,12 @@ type Claims struct {
 }
 
 func SignJWT(userID, tenantID, email, role string, ttl time.Duration) (string, time.Time, error) {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "dev-secret"
+	cfg := config.Get()
+	if cfg == nil {
+		return "", time.Time{}, fmt.Errorf("config not initialized")
 	}
+
+	secret := cfg.JWT.Secret
 	exp := time.Now().Add(ttl)
 	claims := &Claims{
 		UserID:   userID,
@@ -32,5 +36,8 @@ func SignJWT(userID, tenantID, email, role string, ttl time.Duration) (string, t
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(secret))
-	return signed, exp, err
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("failed to sign JWT: %w", err)
+	}
+	return signed, exp, nil
 }

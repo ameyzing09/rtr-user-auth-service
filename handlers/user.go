@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
-	"os"
-	"strings"
 
+	"rtr-user-auth-service/config"
 	"rtr-user-auth-service/domain"
 	errcodes "rtr-user-auth-service/errors"
 	"rtr-user-auth-service/models"
@@ -17,20 +15,6 @@ import (
 
 type UserHandler struct {
 	authService services.AuthService
-}
-
-var defaultPlatformBranding = PlatformBranding{
-	Name:         "Recrutr Platform",
-	LogoURL:      "https://static.recrutr.in/assets/logo.svg",
-	PrimaryColor: "#1F64F0",
-	AccentColor:  "#0D2F81",
-	NavbarTitle:  "Recrutr Admin",
-	SidebarTitle: "Control Plane",
-	SidebarLinks: []PlatformNavItem{
-		{Key: "overview", Label: "Overview", Path: "/admin"},
-		{Key: "tenants", Label: "Tenants", Path: "/admin/tenants"},
-		{Key: "provisioning", Label: "Provisioning", Path: "/admin/provisioning"},
-	},
 }
 
 func NewUserHandler(authService services.AuthService) *UserHandler {
@@ -88,7 +72,7 @@ func (h *UserHandler) AdminLogin(c *gin.Context) {
 		return
 	}
 
-	branding := resolvePlatformBranding()
+	branding := resolvePlatformBranding(config.Get())
 
 	response := LoginResponse{
 		Token:            token.Token,
@@ -171,43 +155,35 @@ func (h *UserHandler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func resolvePlatformBranding() PlatformBranding {
-	name := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_NAME"))
-	logoURL := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_LOGO_URL"))
-	primary := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_PRIMARY_COLOR"))
-	accent := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_ACCENT_COLOR"))
-	navTitle := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_NAVBAR_TITLE"))
-	sidebarTitle := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_SIDEBAR_TITLE"))
-	sidebarLinksJSON := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_SIDEBAR_LINKS"))
-
-	branding := defaultPlatformBranding
-
-	if name != "" {
-		branding.Name = name
-	}
-	if logoURL != "" {
-		branding.LogoURL = logoURL
-	}
-	if primary != "" {
-		branding.PrimaryColor = primary
-	}
-	if accent != "" {
-		branding.AccentColor = accent
-	}
-	if navTitle != "" {
-		branding.NavbarTitle = navTitle
-	}
-	if sidebarTitle != "" {
-		branding.SidebarTitle = sidebarTitle
-	}
-	if sidebarLinksJSON != "" {
-		var links []PlatformNavItem
-		if err := json.Unmarshal([]byte(sidebarLinksJSON), &links); err == nil && len(links) > 0 {
-			branding.SidebarLinks = links
+func resolvePlatformBranding(cfg *config.Config) PlatformBranding {
+	// Convert config.PlatformNavItem to handlers.PlatformNavItem
+	sidebarLinks := make([]PlatformNavItem, len(cfg.Platform.ParsedSidebarLinks))
+	for i, link := range cfg.Platform.ParsedSidebarLinks {
+		sidebarLinks[i] = PlatformNavItem{
+			Key:   link.Key,
+			Label: link.Label,
+			Path:  link.Path,
 		}
 	}
 
+	branding := PlatformBranding{
+		Name:         valueOrDefault(cfg.Platform.BrandName, "Recrutr Platform"),
+		LogoURL:      valueOrDefault(cfg.Platform.BrandLogoURL, "https://static.recrutr.in/assets/logo.svg"),
+		PrimaryColor: valueOrDefault(cfg.Platform.BrandPrimaryColor, "#1F64F0"),
+		AccentColor:  valueOrDefault(cfg.Platform.BrandAccentColor, "#0D2F81"),
+		NavbarTitle:  valueOrDefault(cfg.Platform.BrandNavbarTitle, "Recrutr Admin"),
+		SidebarTitle: valueOrDefault(cfg.Platform.BrandSidebarTitle, "Control Plane"),
+		SidebarLinks: sidebarLinks,
+	}
+
 	return branding
+}
+
+func valueOrDefault(value, defaultValue string) string {
+	if value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func dropClientCache(c *gin.Context) {
