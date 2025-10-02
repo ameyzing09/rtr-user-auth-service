@@ -1,0 +1,25 @@
+{
+  "Token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.superadmin.signature",
+  "ExpiresAt": "2025-12-01T15:04:05Z",
+  "User": {
+    "ID": "u-superadmin-0000-1111-2222-333344445555",
+    "TenantID": "",
+    "Name": "Recrutr Control",
+    "Email": "superadmin@recrutr.in",
+    "Role": "SUPERADMIN",
+    "MustChangePassword": false
+  },
+  "PlatformBranding": {
+    "name": "Recrutr Platform",
+    "logo_url": "https://static.recrutr.in/assets/logo.svg",
+    "primary_color": "#1F64F0",
+    "accent_color": "#0D2F81",
+    "navbar_title": "Recrutr Admin",
+    "sidebar_title": "Control Plane",
+    "sidebar_links": [
+      { "key": "overview", "label": "Overview", "path": "/admin" },
+      { "key": "tenants", "label": "Tenants", "path": "/admin/tenants" },
+      { "key": "provisioning", "label": "Provisioning", "path": "/admin/provisioning" }
+    ]
+  }
+}

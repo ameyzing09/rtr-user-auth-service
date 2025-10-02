@@ -27,10 +27,19 @@ type LoginResponse struct {
 }
 
 type PlatformBranding struct {
-	Name         string `json:"name"`
-	LogoURL      string `json:"logo_url"`
-	PrimaryColor string `json:"primary_color"`
-	AccentColor  string `json:"accent_color"`
+	Name         string            `json:"name"`
+	LogoURL      string            `json:"logo_url"`
+	PrimaryColor string            `json:"primary_color"`
+	AccentColor  string            `json:"accent_color"`
+	NavbarTitle  string            `json:"navbar_title"`
+	SidebarTitle string            `json:"sidebar_title"`
+	SidebarLinks []PlatformNavItem `json:"sidebar_links"`
+}
+
+type PlatformNavItem struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Path  string `json:"path"`
 }
 
 type CreateUserRequest struct {
@@ -77,6 +86,23 @@ type TenantGetResponse struct {
 	CreatedAt    string  `json:"created_at"`
 	UpdatedAt    string  `json:"updated_at"`
 	FailedReason *string `json:"failed_reason,omitempty"`
+}
+
+type TenantListItem struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Domain       *string `json:"domain,omitempty"`
+	Slug         *string `json:"slug,omitempty"`
+	Plan         *string `json:"plan,omitempty"`
+	Status       string  `json:"status"`
+	CreatedBy    *string `json:"created_by,omitempty"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
+	FailedReason *string `json:"failed_reason,omitempty"`
+}
+
+type TenantListResponse struct {
+	Tenants []TenantListItem `json:"tenants"`
 }
 
 type TenantStatusResponse struct {

@@ -7,12 +7,8 @@ import (
 	"strings"
 )
 
-// Validates lowercase domain names with the following rules:
-// - Only lowercase letters (a-z), digits (0-9), and hyphens (-) are allowed.
-// - Hyphens cannot appear at the start or end of a label, only in the middle.
-// - Domain must consist of at least two labels separated by dots.
-// - Each label must start and end with an alphanumeric character.
-var domainPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$`)
+// domainPattern allows single-label domains (for dev environments) and multi-label domains.
+var domainPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$`)
 
 func NormalizeEmail(email string) (string, error) {
 	value := strings.ToLower(strings.TrimSpace(email))
@@ -30,6 +26,7 @@ func NormalizeDomain(domain string) (string, error) {
 	if value == "" {
 		return "", errors.New("domain cannot be empty")
 	}
+
 	value = strings.TrimPrefix(value, "https://")
 	value = strings.TrimPrefix(value, "http://")
 	if idx := strings.Index(value, "/"); idx > -1 {
@@ -39,11 +36,14 @@ func NormalizeDomain(domain string) (string, error) {
 		value = value[:idx]
 	}
 	value = strings.Trim(value, ".")
+
 	if len(value) < 3 || len(value) > 253 {
 		return "", errors.New("domain length invalid")
 	}
+
 	if !domainPattern.MatchString(value) {
 		return "", errors.New("domain format invalid")
 	}
+
 	return value, nil
 }

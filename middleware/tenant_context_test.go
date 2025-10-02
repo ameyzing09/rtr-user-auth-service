@@ -72,6 +72,15 @@ func (s *stubTenantRepo) FindByID(ctx context.Context, tenantID string) (*models
 	return tenant, nil
 }
 
+func (s *stubTenantRepo) ListAll(ctx context.Context) ([]models.Tenant, error) {
+	items := make([]models.Tenant, 0, len(s.tenants))
+	for _, tenant := range s.tenants {
+		copy := *tenant
+		items = append(items, copy)
+	}
+	return items, nil
+}
+
 func init() {
 	gin.SetMode(gin.TestMode)
 }

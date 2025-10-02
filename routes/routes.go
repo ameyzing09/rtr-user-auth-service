@@ -46,9 +46,10 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 
 	// Superadmin control-plane routes (no tenant context)
 	admin := r.Group("/")
-	admin.Use(middleware.AuthMiddleware())
+	admin.Use(middleware.ControlPlaneScope(), middleware.AuthMiddleware())
 	{
 		admin.POST("/admin/logout", userHandler.Logout)
+		admin.GET("/admin/tenants", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.List)
 		admin.POST("/tenant/create", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Create)
 		admin.GET("/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Get)
 		admin.GET("/tenant/:id/status", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Status)
