@@ -136,8 +136,6 @@ func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		tenantRepo := repositories.NewGormTenantRepo(tx)
 		userRepo := repositories.NewGormUserRepo(tx)
-		outboxRepo := repositories.NewGormOutboxRepo(tx)
-		bus := eventbus.NewOutboxBus(outboxRepo)
 
 		tenantID := uuid.NewString()
 		slugCopy := slug
@@ -145,7 +143,7 @@ func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, 
 			ID:        tenantID,
 			Name:      normalizedName,
 			Slug:      &slugCopy,
-			Status:    models.TenantPending,
+			Status:    models.TenantActive,
 			CreatedBy: &actor.ID,
 		}
 		if domainPtr != nil {
@@ -182,20 +180,8 @@ func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, 
 			return err
 		}
 
-		eventPayload := eventbus.TenantCreatedV1{
-			V:             1,
-			TenantID:      tenantID,
-			Name:          tenant.Name,
-			Plan:          string(defaultPlanValue(planPtr)),
-			CreatorUserID: actor.ID,
-			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		}
-		if domainPtr != nil {
-			eventPayload.Domain = *domainPtr
-		}
-		if err := bus.PublishTenantCreated(ctx, eventPayload); err != nil {
-			return err
-		}
+		// Skipping event publishing - tenant is immediately active
+		// No async onboarding queue processing needed
 
 		result = TenantOnboardAsyncResult{
 			TenantID:     tenantID,
@@ -234,7 +220,6 @@ func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, 
 			"id":   result.TenantID,
 			"name": result.Name,
 		},
-		"admin_user_id": result.AdminUserID,
 		"temp_password": result.TempPassword,
 		"status":        string(result.Status),
 	}

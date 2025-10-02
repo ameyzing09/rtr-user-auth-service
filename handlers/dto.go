@@ -70,7 +70,6 @@ type TenantSummary struct {
 
 type TenantCreateResponse struct {
 	Tenant       TenantSummary `json:"tenant"`
-	AdminUserID  string        `json:"admin_user_id"`
 	TempPassword string        `json:"temp_password"`
 	Status       string        `json:"status"`
 }
