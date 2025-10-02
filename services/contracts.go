@@ -65,6 +65,7 @@ type TenantRepository interface {
 	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
+	ListAll(ctx context.Context) ([]models.Tenant, error)
 }
 
 type TenantSettingRepository interface {
@@ -118,4 +119,5 @@ type TenantService interface {
 	GetTenant(ctx context.Context, tenantID string) (*models.Tenant, error)
 	GetTenantStatus(ctx context.Context, tenantID string) (TenantStatusView, error)
 	RetryProvisioning(ctx context.Context, actor UserRead, tenantID string) error
+	ListTenants(ctx context.Context, actor UserRead) ([]models.Tenant, error)
 }

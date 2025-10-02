@@ -13,6 +13,7 @@ type TenantRepository interface {
 	FindByID(ctx context.Context, id string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
+	ListAll(ctx context.Context) ([]models.Tenant, error)
 }
 
 type GormTenantRepo struct {
@@ -53,4 +54,12 @@ func (r *GormTenantRepo) FindBySlug(ctx context.Context, slug string) (*models.T
 		return nil, err
 	}
 	return &tenant, nil
+}
+
+func (r *GormTenantRepo) ListAll(ctx context.Context) ([]models.Tenant, error) {
+	var tenants []models.Tenant
+	if err := r.db.WithContext(ctx).Order("created_at DESC").Find(&tenants).Error; err != nil {
+		return nil, err
+	}
+	return tenants, nil
 }

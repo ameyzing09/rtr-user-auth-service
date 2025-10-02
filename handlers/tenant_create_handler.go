@@ -52,11 +52,16 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 		return
 	}
 
+	//print the raw body for debugging
+	utils.Debug("[TenantCreateHandler] Raw request body: %s", string(rawBody))
+
 	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	if idempotencyKey == "" {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"code": errcodes.ErrCodeValidation, "message": "Idempotency-Key header is required"})
 		return
 	}
+	// print the idempotency key for debugging
+	utils.Debug("[TenantCreateHandler] Idempotency-Key: %s", idempotencyKey)
 
 	keyHash := utils.HashKey(idempotencyKey)
 	requestHash := utils.HashRequest(canonicalBody)
@@ -69,11 +74,18 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 		Plan:       planPointer(req.Plan),
 	}
 
+	// print the service request for debugging
+	utils.Debug("[TenantCreateHandler] Service request: %+v", serviceReq)
 	result, cached, err := h.service.OnboardTenantAsync(c.Request.Context(), actor, serviceReq, keyHash, requestHash)
+	// print err if any
 	if err != nil {
+		utils.Debug("[TenantCreateHandler] OnboardTenantAsync error: %v", err)
 		h.handleError(c, err)
 		return
 	}
+
+	// print the result for debugging
+	utils.Debug("[TenantCreateHandler] OnboardTenantAsync result: %+v (cached=%t)", result, cached)
 
 	response := TenantCreateResponse{
 		Tenant: TenantSummary{
@@ -93,6 +105,51 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 	}
 
 	c.JSON(status, response)
+}
+
+func (h *TenantCreateHandler) List(c *gin.Context) {
+	actor, ok := h.actorFromContext(c)
+	if !ok {
+		return
+	}
+
+	tenants, err := h.service.ListTenants(c.Request.Context(), actor)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	items := make([]TenantListItem, 0, len(tenants))
+	for _, tenant := range tenants {
+		var domainPtr, slugPtr, planPtr *string
+		if tenant.Domain != nil {
+			value := *tenant.Domain
+			domainPtr = &value
+		}
+		if tenant.Slug != nil {
+			value := *tenant.Slug
+			slugPtr = &value
+		}
+		if tenant.Plan != nil {
+			value := string(*tenant.Plan)
+			planPtr = &value
+		}
+
+		items = append(items, TenantListItem{
+			ID:           tenant.ID,
+			Name:         tenant.Name,
+			Domain:       domainPtr,
+			Slug:         slugPtr,
+			Plan:         planPtr,
+			Status:       string(tenant.Status),
+			CreatedBy:    tenant.CreatedBy,
+			CreatedAt:    tenant.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:    tenant.UpdatedAt.UTC().Format(time.RFC3339),
+			FailedReason: tenant.FailedReason,
+		})
+	}
+
+	c.JSON(http.StatusOK, TenantListResponse{Tenants: items})
 }
 
 func (h *TenantCreateHandler) Get(c *gin.Context) {

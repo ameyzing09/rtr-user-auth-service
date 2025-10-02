@@ -47,16 +47,22 @@ func NewTenantService(db *gorm.DB, tr TenantRepository, idr IdempotencyRepositor
 }
 
 func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, req TenantOnboardAsyncRequest, keyHash, requestHash string) (TenantOnboardAsyncResult, bool, error) {
+	//priunt all the arguments for debugging
+	utils.Debug("[TenantService] OnboardTenantAsync called with actor: %+v, req: %+v, keyHash: %s, requestHash: %s", actor, req, keyHash, requestHash)
 	if actor.Role != models.RoleSuperAdmin {
 		return TenantOnboardAsyncResult{}, false, domain.ErrSuperadminRequired
 	}
 
 	normalizedName := strings.TrimSpace(req.Name)
+	//print the normalized name for debugging
+	utils.Debug("[TenantService] Normalized tenant name: %s", normalizedName)
 	if normalizedName == "" {
 		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
 	}
 
 	adminName := strings.TrimSpace(req.AdminName)
+	//print the admin name for debugging
+	utils.Debug("[TenantService] Admin name: %s", adminName)
 	if adminName == "" {
 		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
 	}
@@ -66,14 +72,20 @@ func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, 
 	}
 
 	adminEmail, err := utils.NormalizeEmail(req.AdminEmail)
+	//print the normalized email for debugging
+	utils.Debug("[TenantService] Normalized admin email: %s", adminEmail)
 	if err != nil {
 		return TenantOnboardAsyncResult{}, false, ErrInvalidInput
 	}
 
 	var domainPtr *string
+	//print the domain if any for debugging
+	utils.Debug("[TenantService] Tenant domain: %v", req.Domain)
 	if req.Domain != nil {
 		normalizedDomain, err := utils.NormalizeDomain(*req.Domain)
+		utils.Debug("[TenantService] Normalizing tenant domain: %s", normalizedDomain)
 		if err != nil {
+			utils.Debug("[TenantService] Error normalizing tenant domain: %v", err)
 			return TenantOnboardAsyncResult{}, false, ErrInvalidInput
 		}
 		domainPtr = &normalizedDomain
@@ -304,4 +316,16 @@ func defaultPlanValue(plan *models.Plan) models.Plan {
 		return models.PlanStarter
 	}
 	return *plan
+}
+
+func (s *tenantService) ListTenants(ctx context.Context, actor UserRead) ([]models.Tenant, error) {
+	if actor.Role != models.RoleSuperAdmin {
+		return nil, domain.ErrSuperadminRequired
+	}
+
+	tenants, err := s.tenantRepo.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return tenants, nil
 }

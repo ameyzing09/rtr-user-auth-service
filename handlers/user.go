@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -23,6 +24,13 @@ var defaultPlatformBranding = PlatformBranding{
 	LogoURL:      "https://static.recrutr.in/assets/logo.svg",
 	PrimaryColor: "#1F64F0",
 	AccentColor:  "#0D2F81",
+	NavbarTitle:  "Recrutr Admin",
+	SidebarTitle: "Control Plane",
+	SidebarLinks: []PlatformNavItem{
+		{Key: "overview", Label: "Overview", Path: "/admin"},
+		{Key: "tenants", Label: "Tenants", Path: "/admin/tenants"},
+		{Key: "provisioning", Label: "Provisioning", Path: "/admin/provisioning"},
+	},
 }
 
 func NewUserHandler(authService services.AuthService) *UserHandler {
@@ -168,6 +176,9 @@ func resolvePlatformBranding() PlatformBranding {
 	logoURL := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_LOGO_URL"))
 	primary := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_PRIMARY_COLOR"))
 	accent := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_ACCENT_COLOR"))
+	navTitle := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_NAVBAR_TITLE"))
+	sidebarTitle := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_SIDEBAR_TITLE"))
+	sidebarLinksJSON := strings.TrimSpace(os.Getenv("PLATFORM_BRAND_SIDEBAR_LINKS"))
 
 	branding := defaultPlatformBranding
 
@@ -182,6 +193,18 @@ func resolvePlatformBranding() PlatformBranding {
 	}
 	if accent != "" {
 		branding.AccentColor = accent
+	}
+	if navTitle != "" {
+		branding.NavbarTitle = navTitle
+	}
+	if sidebarTitle != "" {
+		branding.SidebarTitle = sidebarTitle
+	}
+	if sidebarLinksJSON != "" {
+		var links []PlatformNavItem
+		if err := json.Unmarshal([]byte(sidebarLinksJSON), &links); err == nil && len(links) > 0 {
+			branding.SidebarLinks = links
+		}
 	}
 
 	return branding
