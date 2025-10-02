@@ -10,6 +10,8 @@ import (
 type TenantRepository interface {
 	Create(ctx context.Context, tenant *models.Tenant) error
 	Update(ctx context.Context, tenant *models.Tenant) error
+	UpdateStatus(ctx context.Context, tenantID string, status models.TenantStatus) error
+	UpdateStatusWithReason(ctx context.Context, tenantID string, status models.TenantStatus, reason string) error
 	FindByID(ctx context.Context, id string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
@@ -62,4 +64,26 @@ func (r *GormTenantRepo) ListAll(ctx context.Context) ([]models.Tenant, error) {
 		return nil, err
 	}
 	return tenants, nil
+}
+
+// UpdateStatus updates only the status field of a tenant
+func (r *GormTenantRepo) UpdateStatus(ctx context.Context, tenantID string, status models.TenantStatus) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Tenant{}).
+		Where("id = ?", tenantID).
+		Update("status", status).Error
+}
+
+// UpdateStatusWithReason updates the status and failed_reason fields
+func (r *GormTenantRepo) UpdateStatusWithReason(ctx context.Context, tenantID string, status models.TenantStatus, reason string) error {
+	updates := map[string]interface{}{
+		"status": status,
+	}
+	if reason != "" {
+		updates["failed_reason"] = reason
+	}
+	return r.db.WithContext(ctx).
+		Model(&models.Tenant{}).
+		Where("id = ?", tenantID).
+		Updates(updates).Error
 }

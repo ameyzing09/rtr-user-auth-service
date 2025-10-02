@@ -89,3 +89,74 @@ air-install:
 	@echo "==> Installing Air for hot-reload development"
 	go install github.com/air-verse/air@v1.61.5
 	@echo "Air installed. Run 'make dev' to start with hot-reload."
+
+## Build all binaries
+build-all: build-server build-publisher build-consumer
+	@echo "==> All binaries built successfully"
+
+## Build main server
+build-server:
+	@echo "==> Building server binary"
+	go build -o bin/server.exe ./cmd/server/main.go
+
+## Build outbox publisher
+build-publisher:
+	@echo "==> Building outbox publisher binary"
+	go build -o bin/outbox-publisher.exe ./cmd/outbox-publisher/main.go
+
+## Build event consumer
+build-consumer:
+	@echo "==> Building event consumer binary"
+	go build -o bin/event-consumer.exe ./cmd/event-consumer/main.go
+
+## Run outbox publisher
+run-publisher:
+	@echo "==> Starting outbox publisher"
+	go run ./cmd/outbox-publisher/main.go
+
+## Run event consumer
+run-consumer:
+	@echo "==> Starting event consumer"
+	go run ./cmd/event-consumer/main.go
+
+## Run all services (requires multiple terminals or background processes)
+run-all:
+	@echo "==> Starting all services"
+	@echo "Note: Run in separate terminals or use 'make run-all-bg' for background"
+	@echo "Terminal 1: make run"
+	@echo "Terminal 2: make run-publisher"
+	@echo "Terminal 3: make run-consumer"
+
+## Test provisioning system
+test-provisioning:
+	@echo "==> Testing provisioning system components"
+	go test -v ./messaging/... ./services/... ./consumers/...
+
+## Check outbox status (Windows-friendly)
+check-outbox:
+	@powershell -ExecutionPolicy Bypass -File scripts/check-outbox.ps1
+
+## Check tenant status (Windows-friendly)
+check-tenants:
+	@powershell -ExecutionPolicy Bypass -File scripts/check-tenants.ps1
+
+## View recent tenants
+view-tenants:
+	@powershell -ExecutionPolicy Bypass -File scripts/view-tenants.ps1
+
+## Health check - shows all diagnostic queries
+health-check:
+	@powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1
+
+## Retry provisioning for a specific tenant
+retry-tenant:
+	@if [ -z "$(TENANT_ID)" ]; then \
+		echo "Error: TENANT_ID is required"; \
+		echo "Usage: make retry-tenant TENANT_ID=your-tenant-id"; \
+		exit 1; \
+	fi
+	@powershell -ExecutionPolicy Bypass -File scripts/retry-provisioning.ps1 -TenantID "$(TENANT_ID)"
+
+## Retry provisioning for all pending tenants
+retry-all-pending:
+	@powershell -ExecutionPolicy Bypass -File scripts/retry-provisioning.ps1 -AllPending

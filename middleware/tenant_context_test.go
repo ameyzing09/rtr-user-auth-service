@@ -46,6 +46,33 @@ func (s *stubTenantRepo) Update(ctx context.Context, tenant *models.Tenant) erro
 	return nil
 }
 
+func (s *stubTenantRepo) UpdateStatus(ctx context.Context, tenantID string, status models.TenantStatus) error {
+	if s.tenants == nil {
+		return gorm.ErrRecordNotFound
+	}
+	tenant, exists := s.tenants[tenantID]
+	if !exists {
+		return gorm.ErrRecordNotFound
+	}
+	tenant.Status = status
+	return nil
+}
+
+func (s *stubTenantRepo) UpdateStatusWithReason(ctx context.Context, tenantID string, status models.TenantStatus, reason string) error {
+	if s.tenants == nil {
+		return gorm.ErrRecordNotFound
+	}
+	tenant, exists := s.tenants[tenantID]
+	if !exists {
+		return gorm.ErrRecordNotFound
+	}
+	tenant.Status = status
+	if reason != "" {
+		tenant.FailedReason = &reason
+	}
+	return nil
+}
+
 func (s *stubTenantRepo) FindBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
 	for _, tenant := range s.tenants {
 		if tenant.Slug != nil && *tenant.Slug == slug {

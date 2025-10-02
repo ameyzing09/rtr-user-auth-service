@@ -62,6 +62,8 @@ type UserRepository interface {
 type TenantRepository interface {
 	Create(ctx context.Context, tenant *models.Tenant) error
 	Update(ctx context.Context, tenant *models.Tenant) error
+	UpdateStatus(ctx context.Context, tenantID string, status models.TenantStatus) error
+	UpdateStatusWithReason(ctx context.Context, tenantID string, status models.TenantStatus, reason string) error
 	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
