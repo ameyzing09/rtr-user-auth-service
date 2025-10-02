@@ -79,12 +79,11 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 			Domain: result.Domain,
 			Slug:   result.Slug,
 		},
-		AdminUserID:  result.AdminUserID,
 		TempPassword: result.TempPassword,
 		Status:       string(result.Status),
 	}
 
-	status := http.StatusAccepted
+	status := http.StatusCreated
 	if cached {
 		status = http.StatusOK
 	}
