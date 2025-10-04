@@ -150,6 +150,32 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *UserHandler) SuperadminChangePassword(c *gin.Context) {
+	actor := c.MustGet("actor").(services.UserRead)
+
+	var req SuperadminChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.HandleBindingError(c, err)
+		return
+	}
+
+	tempPassword, err := h.authService.SuperadminChangePassword(c, actor, services.SuperadminChangePasswordInput{
+		UserID:   req.UserID,
+		TenantID: req.TenantID,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	response := SuperadminChangePasswordResponse{
+		TemporaryPassword: tempPassword,
+	}
+
+	dropClientCache(c)
+	c.JSON(http.StatusOK, response)
+}
+
 func (h *UserHandler) Logout(c *gin.Context) {
 	dropClientCache(c)
 	c.Status(http.StatusNoContent)

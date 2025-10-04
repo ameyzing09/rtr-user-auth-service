@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -284,6 +285,8 @@ func minutesDiff(a, b int64) int64 {
 
 func verifyTenantSignature(tenantID, domain, ts, sig string) bool {
 	secrets := []string{strings.TrimSpace(os.Getenv("TENANT_CTX_SECRET")), strings.TrimSpace(os.Getenv("TENANT_CTX_SECRET_PREV"))}
+	//log secrets
+	fmt.Printf("Verifying signature with secrets: %v\n", secrets)
 	payload := tenantID + "." + domain + "." + ts
 	for _, secret := range secrets {
 		if secret == "" {

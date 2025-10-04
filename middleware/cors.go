@@ -17,7 +17,7 @@ func CORS() gin.HandlerFunc {
 
 	allowHeaders := []string{"Authorization", "Content-Type", "Idempotency-Key"}
 	if env == "local" {
-		allowHeaders = append(allowHeaders, "X-Tenant-Domain")
+		allowHeaders = append(allowHeaders, "X-Tenant-Domain", "X-Tenant-ID", "X-Tenant-Ts", "X-Tenant-Sig")
 	}
 
 	cfg := cors.Config{
