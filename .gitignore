@@ -1,1 +1,9 @@
 .env
+
+*.md
+*.log
+*.tmp
+
+/docs
+
+.exe

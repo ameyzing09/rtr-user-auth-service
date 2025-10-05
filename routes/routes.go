@@ -65,5 +65,6 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 		admin.POST("/admin/tenant/:id/subscription/suspend", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Suspend)
 		admin.POST("/admin/tenant/:id/subscription/resume", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Resume)
 		admin.POST("/admin/tenant/:id/subscription/cancel", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Cancel)
+		admin.POST("/admin/change-password", middleware.RequireRole(models.RoleSuperAdmin), userHandler.SuperadminChangePassword)
 	}
 }
