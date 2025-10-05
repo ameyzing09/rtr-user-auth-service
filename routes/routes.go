@@ -54,5 +54,6 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 		admin.GET("/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Get)
 		admin.GET("/tenant/:id/status", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Status)
 		admin.POST("/tenant/:id/retry", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Retry)
+		admin.POST("/admin/change-password", middleware.RequireRole(models.RoleSuperAdmin), userHandler.SuperadminChangePassword)
 	}
 }

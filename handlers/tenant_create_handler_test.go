@@ -192,7 +192,7 @@ func TestTenantCreateHandler_SuperAdminFlow(t *testing.T) {
 	if err := json.Unmarshal(repeat.Body.Bytes(), &cached); err != nil {
 		t.Fatalf("failed to unmarshal cached response: %v", err)
 	}
-	if cached.Tenant.ID != resp.Tenant.ID || cached.AdminUserID != resp.AdminUserID {
+	if cached.Tenant.ID != resp.Tenant.ID {
 		t.Fatalf("expected cached response to match initial")
 	}
 

@@ -36,6 +36,11 @@ type ChangePasswordInput struct {
 	NewPassword     string
 }
 
+type SuperadminChangePasswordInput struct {
+	UserID   string
+	TenantID string
+}
+
 type CreateTenantInput struct {
 	Name   string
 	Domain string
@@ -48,6 +53,7 @@ type AuthService interface {
 	ListUsers(ctx context.Context, tenantID string) ([]UserRead, error)
 	CreateUser(ctx context.Context, tenantID string, actor UserRead, input CreateUserInput) (UserRead, string, error)
 	ChangePassword(ctx context.Context, tenantID string, actor UserRead, input ChangePasswordInput) error
+	SuperadminChangePassword(ctx context.Context, actor UserRead, input SuperadminChangePasswordInput) (string, error)
 }
 
 type UserRepository interface {

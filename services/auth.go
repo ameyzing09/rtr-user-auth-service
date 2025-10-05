@@ -135,6 +135,43 @@ func (s *authService) ChangePassword(ctx context.Context, tenantID string, actor
 	return s.users.UpdatePassword(ctx, tenantID, actor.ID, hashedPassword, true)
 }
 
+func (s *authService) SuperadminChangePassword(ctx context.Context, actor UserRead, input SuperadminChangePasswordInput) (string, error) {
+	// Only superadmin can use this method
+	if actor.Role != models.RoleSuperAdmin {
+		return "", domain.ErrForbidden
+	}
+
+	// Find the target user
+	user, err := s.users.FindByID(ctx, input.TenantID, input.UserID)
+	if err != nil {
+		return "", ErrUserNotFound
+	}
+
+	// Only allow changing password if force_password_reset is true
+	if !user.ForcePasswordReset {
+		return "", domain.ErrForbidden
+	}
+
+	// Generate a new temporary password
+	tempPassword, err := utils.GenerateTempPassword()
+	if err != nil {
+		return "", err
+	}
+
+	// Hash the new password
+	hashedPassword, err := utils.HashPassword(tempPassword)
+	if err != nil {
+		return "", err
+	}
+
+	// Update password and clear the force_password_reset flag
+	if err := s.users.UpdatePassword(ctx, input.TenantID, input.UserID, hashedPassword, true); err != nil {
+		return "", err
+	}
+
+	return tempPassword, nil
+}
+
 func toRead(u *models.User) UserRead {
 	return UserRead{
 		ID: u.ID, TenantID: u.TenantID, Name: u.Name, Email: u.Email,
