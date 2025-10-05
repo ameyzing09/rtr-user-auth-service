@@ -59,6 +59,7 @@ type TenantCreateRequest struct {
 	AdminName  string  `json:"admin_name" binding:"required,min=2"`
 	AdminEmail string  `json:"admin_email" binding:"required,email"`
 	Plan       *string `json:"plan" binding:"omitempty,oneof=BASIC STARTER GROWTH ENTERPRISE ON_PREM"`
+	IsTrial    bool    `json:"is_trial"`
 }
 
 type TenantSummary struct {
@@ -107,4 +108,41 @@ type TenantListResponse struct {
 type TenantStatusResponse struct {
 	Status string   `json:"status"`
 	Steps  []string `json:"steps,omitempty"`
+}
+
+type TenantUpdateRequest struct {
+	Name   *string `json:"name,omitempty" binding:"omitempty,min=2"`
+	Domain *string `json:"domain,omitempty" binding:"omitempty,min=3"`
+	Plan   *string `json:"plan,omitempty" binding:"omitempty,oneof=BASIC STARTER GROWTH ENTERPRISE ON_PREM"`
+	Status *string `json:"status,omitempty" binding:"omitempty,oneof=PENDING PROVISIONING AWAITING_BRANDING ACTIVE FAILED SUSPENDED DELETED"`
+}
+
+type TenantListPaginatedResponse struct {
+	Tenants  []TenantListItem `json:"tenants"`
+	Total    int              `json:"total"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"page_size"`
+}
+
+type SubscriptionResponse struct {
+	ID            uint64  `json:"id"`
+	TenantID      string  `json:"tenant_id"`
+	Plan          string  `json:"plan"`
+	BillingCycle  string  `json:"billing_cycle"`
+	Status        string  `json:"status"`
+	DerivedStatus string  `json:"derived_status"`
+	Currency      string  `json:"currency"`
+	AmountCents   uint32  `json:"amount_cents"`
+	PeriodStart   *string `json:"period_start,omitempty"`
+	PeriodEnd     *string `json:"period_end,omitempty"`
+	TrialEndsAt   *string `json:"trial_ends_at,omitempty"`
+	NextRenewalAt *string `json:"next_renewal_at,omitempty"`
+	CanceledAt    *string `json:"canceled_at,omitempty"`
+	CreatedAt     string  `json:"created_at"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+type SubscriptionActivateRequest struct {
+	BillingCycle string `json:"billing_cycle" binding:"required,oneof=MONTHLY ANNUAL"`
+	AmountCents  uint32 `json:"amount_cents,omitempty"`
 }

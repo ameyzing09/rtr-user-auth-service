@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSettingHandler *handlers.TenantSettingHandler, tenantAdminHandler *handlers.TenantCreateHandler, tenantRepo repositories.TenantRepository) {
+func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSettingHandler *handlers.TenantSettingHandler, tenantAdminHandler *handlers.TenantCreateHandler, subscriptionAdminHandler *handlers.SubscriptionAdminHandler, tenantRepo repositories.TenantRepository) {
 	r.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "rtr-user-auth-service: ok")
 	})
@@ -49,10 +49,21 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 	admin.Use(middleware.ControlPlaneScope(), middleware.AuthMiddleware())
 	{
 		admin.POST("/admin/logout", userHandler.Logout)
+
+		// Tenant CRUD operations
 		admin.GET("/admin/tenants", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.List)
-		admin.POST("/tenant/create", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Create)
-		admin.GET("/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Get)
+		admin.POST("/admin/tenant/create", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Create)
+		admin.GET("/admin/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Get)
+		admin.PUT("/admin/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Update)
+		admin.DELETE("/admin/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Delete)
 		admin.GET("/tenant/:id/status", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Status)
 		admin.POST("/tenant/:id/retry", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Retry)
+
+		// Subscription management
+		admin.GET("/admin/tenant/:id/subscription", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Get)
+		admin.POST("/admin/tenant/:id/subscription/activate", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Activate)
+		admin.POST("/admin/tenant/:id/subscription/suspend", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Suspend)
+		admin.POST("/admin/tenant/:id/subscription/resume", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Resume)
+		admin.POST("/admin/tenant/:id/subscription/cancel", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Cancel)
 	}
 }

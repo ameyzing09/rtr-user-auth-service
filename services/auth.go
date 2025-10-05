@@ -18,10 +18,11 @@ type authService struct {
 	db      *gorm.DB
 	users   UserRepository
 	tenants TenantRepository
+	subs    SubscriptionService
 }
 
-func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository) *authService {
-	return &authService{db: db, users: u, tenants: t}
+func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository, s SubscriptionService) *authService {
+	return &authService{db: db, users: u, tenants: t, subs: s}
 }
 
 func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, UserRead, error) {
@@ -33,6 +34,21 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, U
 	if !utils.CheckPassword(user.Password, input.Password) {
 		return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
 	}
+
+	// Check subscription status for non-superadmin users
+	if user.Role != models.RoleSuperAdmin {
+		sub, err := s.subs.GetSubscription(ctx, user.TenantID)
+		if err != nil {
+			return AuthToken{}, UserRead{}, err
+		}
+
+		now := time.Now().UTC()
+		effectiveStatus := EffectiveStatus(sub, now)
+		if effectiveStatus == models.SubSuspended || effectiveStatus == models.SubCanceled {
+			return AuthToken{}, UserRead{}, domain.ErrSubscriptionInactive
+		}
+	}
+
 	token, exp, err := utils.SignJWT(user.ID, user.TenantID, user.Email, string(user.Role), 24*time.Hour)
 	if err != nil {
 		return AuthToken{}, UserRead{}, err

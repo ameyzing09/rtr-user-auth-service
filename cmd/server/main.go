@@ -72,6 +72,7 @@ type repositoriesContainer struct {
 	TenantRepo        services.TenantRepository
 	TenantSettingRepo services.TenantSettingRepository
 	IdempotencyRepo   services.IdempotencyRepository
+	SubscriptionRepo  repositories.SubscriptionRepository
 }
 
 func initRepositories(db *gorm.DB) *repositoriesContainer {
@@ -80,6 +81,7 @@ func initRepositories(db *gorm.DB) *repositoriesContainer {
 		TenantRepo:        repositories.NewGormTenantRepo(db),
 		TenantSettingRepo: repositories.NewGormTenantSettingRepo(db),
 		IdempotencyRepo:   repositories.NewGormIdempotencyRepo(db),
+		SubscriptionRepo:  repositories.NewSubscriptionRepository(db),
 	}
 }
 
@@ -87,27 +89,32 @@ type servicesContainer struct {
 	AuthService          services.AuthService
 	TenantSettingService services.TenantSettingService
 	TenantService        services.TenantService
+	SubscriptionService  services.SubscriptionService
 }
 
 func initServices(db *gorm.DB, repos *repositoriesContainer, cfg *config.Config) *servicesContainer {
+	subscriptionService := services.NewSubscriptionService(repos.SubscriptionRepo)
 	return &servicesContainer{
-		AuthService:          services.NewAuthService(db, repos.UserRepo, repos.TenantRepo),
+		AuthService:          services.NewAuthService(db, repos.UserRepo, repos.TenantRepo, subscriptionService),
 		TenantSettingService: services.NewTenantSettingService(repos.TenantSettingRepo),
-		TenantService:        services.NewTenantService(db, repos.TenantRepo, repos.IdempotencyRepo),
+		TenantService:        services.NewTenantService(db, repos.TenantRepo, repos.IdempotencyRepo, subscriptionService),
+		SubscriptionService:  subscriptionService,
 	}
 }
 
 type handlersContainer struct {
-	UserHandler          *handlers.UserHandler
-	TenantSettingHandler *handlers.TenantSettingHandler
-	TenantAdminHandler   *handlers.TenantCreateHandler
+	UserHandler              *handlers.UserHandler
+	TenantSettingHandler     *handlers.TenantSettingHandler
+	TenantAdminHandler       *handlers.TenantCreateHandler
+	SubscriptionAdminHandler *handlers.SubscriptionAdminHandler
 }
 
 func initHandlers(svcs *servicesContainer) *handlersContainer {
 	return &handlersContainer{
-		UserHandler:          handlers.NewUserHandler(svcs.AuthService),
-		TenantSettingHandler: handlers.NewTenantSettingHandler(svcs.TenantSettingService),
-		TenantAdminHandler:   handlers.NewTenantCreateHandler(svcs.TenantService),
+		UserHandler:              handlers.NewUserHandler(svcs.AuthService),
+		TenantSettingHandler:     handlers.NewTenantSettingHandler(svcs.TenantSettingService),
+		TenantAdminHandler:       handlers.NewTenantCreateHandler(svcs.TenantService),
+		SubscriptionAdminHandler: handlers.NewSubscriptionAdminHandler(svcs.SubscriptionService),
 	}
 }
 
@@ -121,6 +128,7 @@ func setupRouter(hndlrs *handlersContainer, tenantRepo services.TenantRepository
 		hndlrs.UserHandler,
 		hndlrs.TenantSettingHandler,
 		hndlrs.TenantAdminHandler,
+		hndlrs.SubscriptionAdminHandler,
 		tenantRepo,
 	)
 

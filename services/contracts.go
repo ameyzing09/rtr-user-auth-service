@@ -62,10 +62,12 @@ type UserRepository interface {
 type TenantRepository interface {
 	Create(ctx context.Context, tenant *models.Tenant) error
 	Update(ctx context.Context, tenant *models.Tenant) error
+	Delete(ctx context.Context, id string) error
 	FindByID(ctx context.Context, tenantID string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
 	ListAll(ctx context.Context) ([]models.Tenant, error)
+	ListPaginated(ctx context.Context, page, pageSize int) ([]models.Tenant, int, error)
 }
 
 type TenantSettingRepository interface {
@@ -97,6 +99,7 @@ type TenantOnboardAsyncRequest struct {
 	AdminName  string
 	AdminEmail string
 	Plan       *models.Plan
+	IsTrial    bool
 }
 
 type TenantOnboardAsyncResult struct {
@@ -114,10 +117,47 @@ type TenantStatusView struct {
 	Steps  []string
 }
 
+type CreateTenantReq struct {
+	Name    string
+	Domain  *string
+	Plan    models.Plan
+	IsTrial bool
+}
+
+type UpdateTenantReq struct {
+	Name   *string
+	Domain *string
+	Plan   *models.Plan
+	Status *models.TenantStatus
+}
+
+type TenantDTO struct {
+	ID           string
+	Name         string
+	Domain       *string
+	Slug         *string
+	Plan         *models.Plan
+	Status       models.TenantStatus
+	CreatedBy    *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	FailedReason *string
+}
+
+type TenantListResult struct {
+	Tenants  []TenantDTO
+	Total    int
+	Page     int
+	PageSize int
+}
+
 type TenantService interface {
 	OnboardTenantAsync(ctx context.Context, actor UserRead, req TenantOnboardAsyncRequest, keyHash, requestHash string) (TenantOnboardAsyncResult, bool, error)
-	GetTenant(ctx context.Context, tenantID string) (*models.Tenant, error)
+	CreateTenant(ctx context.Context, req CreateTenantReq, actorID string) (TenantDTO, error)
+	GetTenant(ctx context.Context, id string) (TenantDTO, error)
+	UpdateTenant(ctx context.Context, id string, req UpdateTenantReq, actorID string) (TenantDTO, error)
+	DeleteTenant(ctx context.Context, id string, actorID string) error
+	ListTenants(ctx context.Context, page, pageSize int) (TenantListResult, error)
 	GetTenantStatus(ctx context.Context, tenantID string) (TenantStatusView, error)
 	RetryProvisioning(ctx context.Context, actor UserRead, tenantID string) error
-	ListTenants(ctx context.Context, actor UserRead) ([]models.Tenant, error)
 }

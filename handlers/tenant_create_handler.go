@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,6 +65,7 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 		AdminName:  req.AdminName,
 		AdminEmail: req.AdminEmail,
 		Plan:       PlanPointer(req.Plan),
+		IsTrial:    req.IsTrial,
 	}
 
 	result, cached, err := h.service.OnboardTenantAsync(c.Request.Context(), actor, serviceReq, keyHash, requestHash)
@@ -92,20 +94,41 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 }
 
 func (h *TenantCreateHandler) List(c *gin.Context) {
-	actor := ActorFromContext(c)
+	// Parse pagination parameters
+	page := 1
+	pageSize := 20
 
-	tenants, err := h.service.ListTenants(c.Request.Context(), actor)
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if sizeStr := c.Query("size"); sizeStr != "" {
+		if s, err := strconv.Atoi(sizeStr); err == nil && s > 0 && s <= 100 {
+			pageSize = s
+		}
+	}
+
+	result, err := h.service.ListTenants(c.Request.Context(), page, pageSize)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	items := make([]TenantListItem, 0, len(tenants))
-	for _, tenant := range tenants {
-		items = append(items, mapTenantToListItem(&tenant))
+	items := make([]TenantListItem, 0, len(result.Tenants))
+	for _, tenant := range result.Tenants {
+		items = append(items, mapTenantDTOToListItem(tenant))
 	}
 
-	c.JSON(http.StatusOK, TenantListResponse{Tenants: items})
+	response := TenantListPaginatedResponse{
+		Tenants:  items,
+		Total:    result.Total,
+		Page:     result.Page,
+		PageSize: result.PageSize,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *TenantCreateHandler) Get(c *gin.Context) {
@@ -123,8 +146,70 @@ func (h *TenantCreateHandler) Get(c *gin.Context) {
 		return
 	}
 
-	response := mapTenantToGetResponse(tenant)
+	response := mapTenantDTOToGetResponse(tenant)
 	c.JSON(http.StatusOK, response)
+}
+
+func (h *TenantCreateHandler) Update(c *gin.Context) {
+	actor := ActorFromContext(c)
+
+	tenantID := strings.TrimSpace(c.Param("id"))
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": errcodes.ErrCodeValidation, "message": "tenant id is required"})
+		return
+	}
+
+	var req TenantUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.HandleBindingError(c, err)
+		return
+	}
+
+	// Convert string pointers to model types
+	var planPtr *models.Plan
+	if req.Plan != nil {
+		plan := models.Plan(*req.Plan)
+		planPtr = &plan
+	}
+
+	var statusPtr *models.TenantStatus
+	if req.Status != nil {
+		status := models.TenantStatus(*req.Status)
+		statusPtr = &status
+	}
+
+	serviceReq := services.UpdateTenantReq{
+		Name:   req.Name,
+		Domain: req.Domain,
+		Plan:   planPtr,
+		Status: statusPtr,
+	}
+
+	tenant, err := h.service.UpdateTenant(c.Request.Context(), tenantID, serviceReq, actor.ID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	response := mapTenantDTOToGetResponse(tenant)
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *TenantCreateHandler) Delete(c *gin.Context) {
+	actor := ActorFromContext(c)
+
+	tenantID := strings.TrimSpace(c.Param("id"))
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": errcodes.ErrCodeValidation, "message": "tenant id is required"})
+		return
+	}
+
+	if err := h.service.DeleteTenant(c.Request.Context(), tenantID, actor.ID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 func (h *TenantCreateHandler) Status(c *gin.Context) {
@@ -203,7 +288,40 @@ func mapTenantToListItem(tenant *models.Tenant) TenantListItem {
 	}
 }
 
+func mapTenantDTOToListItem(tenant services.TenantDTO) TenantListItem {
+	return TenantListItem{
+		ID:           tenant.ID,
+		Name:         tenant.Name,
+		Domain:       StringPointer(tenant.Domain),
+		Slug:         StringPointer(tenant.Slug),
+		Plan:         planToStringPointer(tenant.Plan),
+		Status:       string(tenant.Status),
+		CreatedBy:    tenant.CreatedBy,
+		CreatedAt:    tenant.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    tenant.UpdatedAt.UTC().Format(time.RFC3339),
+		FailedReason: tenant.FailedReason,
+	}
+}
+
 func mapTenantToGetResponse(tenant *models.Tenant) TenantGetResponse {
+	resp := TenantGetResponse{
+		ID:           tenant.ID,
+		Name:         tenant.Name,
+		Domain:       StringPointer(tenant.Domain),
+		Slug:         StringPointer(tenant.Slug),
+		Plan:         planToStringPointer(tenant.Plan),
+		Status:       string(tenant.Status),
+		CreatedAt:    tenant.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    tenant.UpdatedAt.UTC().Format(time.RFC3339),
+		FailedReason: tenant.FailedReason,
+	}
+	if tenant.CreatedBy != nil {
+		resp.CreatedBy = tenant.CreatedBy
+	}
+	return resp
+}
+
+func mapTenantDTOToGetResponse(tenant services.TenantDTO) TenantGetResponse {
 	resp := TenantGetResponse{
 		ID:           tenant.ID,
 		Name:         tenant.Name,
