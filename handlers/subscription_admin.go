@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
+	"rtr-user-auth-service/domain"
 	"rtr-user-auth-service/models"
 	"rtr-user-auth-service/services"
 	"rtr-user-auth-service/utils/httpx"
@@ -31,12 +33,11 @@ func (h *SubscriptionAdminHandler) Get(c *gin.Context) {
 
 	sub, err := h.subscriptionSvc.GetSubscription(c.Request.Context(), tenantID)
 	if err != nil {
+		if errors.Is(err, domain.ErrSubscriptionNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "message": "subscription not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": "internal_error", "message": "failed to get subscription"})
-		return
-	}
-
-	if sub == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": "not_found", "message": "subscription not found"})
 		return
 	}
 

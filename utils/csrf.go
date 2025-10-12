@@ -2,6 +2,7 @@ package utils
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 )
@@ -27,5 +28,5 @@ func ValidateCSRFToken(headerToken, cookieToken string) bool {
 		return false
 	}
 	// Use constant-time comparison to prevent timing attacks
-	return headerToken == cookieToken
+	return subtle.ConstantTimeCompare([]byte(headerToken), []byte(cookieToken)) == 1
 }

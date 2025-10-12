@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"rtr-user-auth-service/domain"
 	"rtr-user-auth-service/models"
 	"rtr-user-auth-service/repositories"
 	"rtr-user-auth-service/utils"
@@ -66,7 +67,7 @@ func (s *subscriptionService) GetSubscription(ctx context.Context, tenantID stri
 	sub, err := s.repo.FindByTenant(ctx, tenantID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // No subscription found
+			return nil, domain.ErrSubscriptionNotFound
 		}
 		return nil, err
 	}

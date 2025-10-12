@@ -95,7 +95,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 				utils.Debug("[AuthMiddleware] Missing or invalid Authorization header and no cookie")
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid Authorization header"})
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 				return
 			}
 

@@ -52,7 +52,7 @@ func NewTenantService(db *gorm.DB, tr TenantRepository, tar TenantArchiveReposit
 
 func (s *tenantService) OnboardTenantAsync(ctx context.Context, actor UserRead, req TenantOnboardAsyncRequest, keyHash, requestHash string) (TenantOnboardAsyncResult, bool, error) {
 	//priunt all the arguments for debugging
-	utils.Debug("[TenantService] OnboardTenantAsync called with actor: %+v, req: %+v, keyHash: %s, requestHash: %s", actor, req, keyHash, requestHash)
+	utils.Debug("[TenantService] OnboardTenantAsync called with actorID: %s, actorRole: %s", actor.ID, actor.Role)
 	if actor.Role != models.RoleSuperAdmin {
 		return TenantOnboardAsyncResult{}, false, domain.ErrSuperadminRequired
 	}
@@ -541,9 +541,6 @@ func (s *tenantService) ListTenants(ctx context.Context, page, pageSize int) (Te
 	}
 
 	utils.Debug("[TenantService] ListTenants found %d tenants (total: %d, page: %d, pageSize: %d)", len(tenants), total, page, pageSize)
-	for i, tenant := range tenants {
-		utils.Debug("[TenantService] Tenant[%d]: ID=%s, Name=%s, CreatedAt=%v, UpdatedAt=%v", i, tenant.ID, tenant.Name, tenant.CreatedAt, tenant.UpdatedAt)
-	}
 
 	tenantDTOs := make([]TenantDTO, len(tenants))
 	for i, tenant := range tenants {
