@@ -15,7 +15,8 @@ func CORS() gin.HandlerFunc {
 		env = "local"
 	}
 
-	allowHeaders := []string{"Authorization", "Content-Type", "Idempotency-Key"}
+	// X-CSRF-Token is always allowed for CSRF protection
+	allowHeaders := []string{"Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"}
 	if env == "local" {
 		allowHeaders = append(allowHeaders, "X-Tenant-Domain", "X-Tenant-ID", "X-Tenant-Ts", "X-Tenant-Sig")
 	}

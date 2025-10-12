@@ -13,7 +13,7 @@ type User struct {
 	Name                string    `gorm:"type:varchar(150);not null"`
 	Email               string    `gorm:"type:varchar(190);not null;uniqueIndex:ux_users_tenant_email,priority:2"`
 	Password            string    `gorm:"type:char(60);not null" json:"-"`
-	Role                Role      `gorm:"type:ENUM('SUPERADMIN','ADMIN','HR','INTERVIEWER','CANDIDATE');not null;default:'CANDIDATE'"`
+	Role                Role      `gorm:"type:ENUM('SUPERADMIN','ADMIN','HR','INTERVIEWER','VIEWER','CANDIDATE');not null;default:'CANDIDATE'"`
 	IsOwner             bool      `gorm:"not null;default:false"`
 	ForcePasswordReset  bool      `gorm:"column:force_password_reset;not null;default:false"`
 	CreatedAt           time.Time `gorm:"not null;default:CURRENT_TIMESTAMP"`

@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"rtr-user-auth-service/config"
 	"rtr-user-auth-service/domain"
 	errcodes "rtr-user-auth-service/errors"
 	"rtr-user-auth-service/models"
 	"rtr-user-auth-service/services"
+	"rtr-user-auth-service/utils"
 	"rtr-user-auth-service/utils/httpx"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +41,9 @@ func (h *UserHandler) Login(c *gin.Context) {
 	}
 
 	c.Header("X-Tenant-ID", user.TenantID)
+
+	// Set httpOnly cookie for JWT token
+	setCookies(c, token.Token)
 
 	response := LoginResponse{
 		Token:     token.Token,
@@ -73,6 +79,9 @@ func (h *UserHandler) AdminLogin(c *gin.Context) {
 	}
 
 	branding := resolvePlatformBranding(config.Get())
+
+	// Set httpOnly cookie for JWT token
+	setCookies(c, token.Token)
 
 	response := LoginResponse{
 		Token:            token.Token,
@@ -177,6 +186,8 @@ func (h *UserHandler) SuperadminChangePassword(c *gin.Context) {
 }
 
 func (h *UserHandler) Logout(c *gin.Context) {
+	// Clear cookies
+	clearCookies(c)
 	dropClientCache(c)
 	c.Status(http.StatusNoContent)
 }
@@ -215,4 +226,101 @@ func valueOrDefault(value, defaultValue string) string {
 func dropClientCache(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
+}
+
+// setCookies sets both the access token and CSRF token cookies
+func setCookies(c *gin.Context, accessToken string) {
+	cfg := config.Get()
+	if cfg == nil {
+		// Fallback to defaults if config not available
+		setAccessTokenCookie(c, accessToken, "", false, "Lax", int((24 * time.Hour).Seconds()))
+		setCSRFTokenCookie(c, "", false, "Lax", int((24 * time.Hour).Seconds()))
+		return
+	}
+
+	cookieCfg := cfg.Cookie
+	maxAge := int(cookieCfg.MaxAge.Seconds())
+
+	// Set access token cookie (httpOnly=true, not readable by JS)
+	setAccessTokenCookie(c, accessToken, cookieCfg.Domain, cookieCfg.Secure, cookieCfg.SameSite, maxAge)
+
+	// Set CSRF token cookie (httpOnly=false, readable by JS for header)
+	setCSRFTokenCookie(c, cookieCfg.Domain, cookieCfg.Secure, cookieCfg.SameSite, maxAge)
+}
+
+func setAccessTokenCookie(c *gin.Context, token, domain string, secure bool, sameSite string, maxAge int) {
+	c.SetSameSite(parseSameSite(sameSite))
+	c.SetCookie(
+		"access_token",
+		token,
+		maxAge,
+		"/",
+		domain,
+		secure,
+		true, // httpOnly
+	)
+}
+
+func setCSRFTokenCookie(c *gin.Context, domain string, secure bool, sameSite string, maxAge int) {
+	// Generate CSRF token
+	csrfToken, err := utils.GenerateCSRFToken()
+	if err != nil {
+		utils.Warn("[Cookie] Failed to generate CSRF token: %v", err)
+		csrfToken = "fallback-csrf-token" // Fallback (should not happen)
+	}
+
+	c.SetSameSite(parseSameSite(sameSite))
+	c.SetCookie(
+		"csrf_token",
+		csrfToken,
+		maxAge,
+		"/",
+		domain,
+		secure,
+		false, // NOT httpOnly - JS needs to read this
+	)
+}
+
+func parseSameSite(sameSite string) http.SameSite {
+	switch strings.ToLower(sameSite) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	case "lax":
+		return http.SameSiteLaxMode
+	default:
+		return http.SameSiteLaxMode
+	}
+}
+
+// clearCookies clears both access token and CSRF token cookies
+func clearCookies(c *gin.Context) {
+	cfg := config.Get()
+	domain := ""
+	if cfg != nil {
+		domain = cfg.Cookie.Domain
+	}
+
+	// Clear access_token cookie
+	c.SetCookie(
+		"access_token",
+		"",
+		-1, // maxAge=-1 to delete cookie
+		"/",
+		domain,
+		false,
+		true,
+	)
+
+	// Clear csrf_token cookie
+	c.SetCookie(
+		"csrf_token",
+		"",
+		-1, // maxAge=-1 to delete cookie
+		"/",
+		domain,
+		false,
+		false,
+	)
 }

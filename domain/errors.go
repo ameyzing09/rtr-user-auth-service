@@ -13,4 +13,6 @@ var (
 	ErrTenantSlugTaken                 = errors.New("tenant slug already taken")
 	ErrSuperadminRequired              = errors.New("superadmin required")
 	ErrIdempotencyKeyReuseDifferentReq = errors.New("idempotency key reuse with different request")
+	ErrSubscriptionNotFound            = errors.New("subscription not found")
+	ErrSubscriptionInactive            = errors.New("subscription inactive")
 )

@@ -20,6 +20,7 @@ type Config struct {
 	Logging  LoggingConfig
 	Slug     SlugConfig
 	Platform PlatformConfig
+	Cookie   CookieConfig
 }
 
 // ServerConfig contains server-related settings
@@ -85,6 +86,14 @@ type PlatformNavItem struct {
 	Path  string `json:"path"`
 }
 
+// CookieConfig contains HTTP cookie settings for session management
+type CookieConfig struct {
+	Domain   string        // Cookie domain (empty for current domain)
+	Secure   bool          // Only send over HTTPS
+	SameSite string        // SameSite attribute: "Lax", "Strict", or "None"
+	MaxAge   time.Duration // Cookie expiration duration
+}
+
 const (
 	// Default values
 	defaultServerPort        = "8082"
@@ -96,6 +105,8 @@ const (
 	defaultDBConnMaxLifetime = 5 * time.Minute
 	defaultSlugMinLength     = 3
 	defaultSlugMaxLength     = 30
+	defaultCookieMaxAge      = 24 * time.Hour
+	defaultCookieSameSite    = "Lax"
 )
 
 var defaultSlugSuffixes = []string{"-hq", "-io", "-team", "-app", "-co"}
@@ -115,6 +126,7 @@ func Load() (*Config, error) {
 		Logging:  loadLoggingConfig(),
 		Slug:     loadSlugConfig(),
 		Platform: loadPlatformConfig(),
+		Cookie:   loadCookieConfig(),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -205,9 +217,9 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// DSN returns the MySQL connection string
+// DSN returns the MySQL connection string with UTC timezone enforcement
 func (c *DatabaseConfig) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&multiStatements=true",
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&multiStatements=true&loc=UTC",
 		c.User, c.Password, c.Host, c.Port, c.Name)
 }
 
@@ -288,4 +300,25 @@ func loadPlatformConfig() PlatformConfig {
 
 func parseJSONLinks(jsonStr string, target *[]PlatformNavItem) error {
 	return json.Unmarshal([]byte(jsonStr), target)
+}
+
+func loadCookieConfig() CookieConfig {
+	env := strings.ToLower(getEnvOrDefault("ENV", "local"))
+
+	// In local/dev, don't require HTTPS; in prod, require it
+	secure := env != "local" && env != "dev"
+
+	return CookieConfig{
+		Domain:   getEnvOrDefault("COOKIE_DOMAIN", ""),
+		Secure:   getEnvAsBool("COOKIE_SECURE", secure),
+		SameSite: getEnvOrDefault("COOKIE_SAMESITE", defaultCookieSameSite),
+		MaxAge:   getEnvAsDuration("COOKIE_MAX_AGE", defaultCookieMaxAge),
+	}
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if val := os.Getenv(key); val != "" {
+		return val == "true" || val == "1" || val == "yes"
+	}
+	return defaultValue
 }

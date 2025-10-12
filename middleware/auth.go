@@ -65,10 +65,11 @@ func permitDevSuperadmin(c *gin.Context, token string) bool {
 	utils.Warn("[AuthMiddleware] SUPERADMIN_DEV_TOKEN accepted for control-plane request (env=%s)", env)
 
 	actor := services.UserRead{
-		ID:       "dev-superadmin",
-		TenantID: "",
-		Email:    "dev-superadmin@local",
-		Role:     models.RoleSuperAdmin,
+		ID:          "dev-superadmin",
+		TenantID:    "",
+		Email:       "dev-superadmin@local",
+		Role:        models.RoleSuperAdmin,
+		Permissions: models.GetRolePermissions(models.RoleSuperAdmin),
 	}
 
 	c.Set("actor", actor)
@@ -78,17 +79,30 @@ func permitDevSuperadmin(c *gin.Context, token string) bool {
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		utils.Debug("[AuthMiddleware] Authorization header present=%t", authHeader != "")
+		var tokenStr string
+		var source string
 
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			utils.Debug("[AuthMiddleware] Missing or invalid Authorization header")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid Authorization header"})
-			return
+		// Try to get token from cookie first (preferred method)
+		cookieToken, cookieErr := c.Cookie("access_token")
+		if cookieErr == nil && cookieToken != "" {
+			tokenStr = cookieToken
+			source = "cookie"
+			utils.Debug("[AuthMiddleware] Token from cookie, length=%d", len(tokenStr))
+		} else {
+			// Fallback to Authorization header (backwards compatibility)
+			authHeader := c.GetHeader("Authorization")
+			utils.Debug("[AuthMiddleware] Authorization header present=%t", authHeader != "")
+
+			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				utils.Debug("[AuthMiddleware] Missing or invalid Authorization header and no cookie")
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+				return
+			}
+
+			tokenStr = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+			source = "header"
+			utils.Debug("[AuthMiddleware] Token from header, length=%d", len(tokenStr))
 		}
-
-		tokenStr := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-		utils.Debug("[AuthMiddleware] Received token length=%d", len(tokenStr))
 
 		claims := &utils.Claims{}
 		secret := os.Getenv("JWT_SECRET")
@@ -113,13 +127,14 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		actor := services.UserRead{
-			ID:       claims.UserID,
-			TenantID: claims.TenantID,
-			Email:    claims.Email,
-			Role:     models.Role(claims.Role),
+			ID:          claims.UserID,
+			TenantID:    claims.TenantID,
+			Email:       claims.Email,
+			Role:        models.Role(claims.Role),
+			Permissions: claims.Permissions,
 		}
 
-		utils.Debug("[AuthMiddleware] Authenticated actor: userID=%s tenantID=%s role=%s", actor.ID, actor.TenantID, actor.Role)
+		utils.Debug("[AuthMiddleware] Authenticated actor: userID=%s tenantID=%s role=%s permissions=%v source=%s", actor.ID, actor.TenantID, actor.Role, actor.Permissions, source)
 
 		if tid := c.GetString(CtxTenantIDKey); tid != "" && actor.Role != models.RoleSuperAdmin && tid != actor.TenantID {
 			utils.Warn("[AuthMiddleware] Tenant mismatch: requestTenant=%s actorTenant=%s actorRole=%s", tid, actor.TenantID, actor.Role)

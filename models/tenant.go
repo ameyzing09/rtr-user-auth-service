@@ -30,16 +30,17 @@ const (
 )
 
 type Tenant struct {
-	ID           string       `gorm:"type:char(36);primaryKey"`
-	Name         string       `gorm:"type:varchar(255);not null"`
-	Domain       *string      `gorm:"type:varchar(255);uniqueIndex:ux_tenants_domain"`
-	Slug         *string      `gorm:"type:varchar(50);uniqueIndex:ux_tenants_slug"`
-	Plan         *Plan        `gorm:"type:enum('BASIC','STARTER','GROWTH','ENTERPRISE','ON_PREM')"`
-	Status       TenantStatus `gorm:"type:enum('PENDING','PROVISIONING','AWAITING_BRANDING','ACTIVE','FAILED','SUSPENDED','DELETED');not null;default:'PENDING'"`
-	CreatedBy    *string      `gorm:"type:char(36)"`
-	FailedReason *string      `gorm:"type:text"`
-	CreatedAt    time.Time    `gorm:"not null;default:CURRENT_TIMESTAMP"`
-	UpdatedAt    time.Time    `gorm:"not null;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
+	ID           string         `gorm:"type:char(36);primaryKey"`
+	Name         string         `gorm:"type:varchar(255);not null"`
+	Domain       *string        `gorm:"type:varchar(255);uniqueIndex:ux_tenants_domain"`
+	Slug         *string        `gorm:"type:varchar(50);uniqueIndex:ux_tenants_slug"`
+	Plan         *Plan          `gorm:"type:enum('BASIC','STARTER','GROWTH','ENTERPRISE','ON_PREM')"`
+	Status       TenantStatus   `gorm:"type:enum('PENDING','PROVISIONING','AWAITING_BRANDING','ACTIVE','FAILED','SUSPENDED','DELETED');not null;default:'PENDING'"`
+	CreatedBy    *string        `gorm:"type:char(36)"`
+	FailedReason *string        `gorm:"type:text"`
+	CreatedAt    time.Time      `gorm:"not null;default:CURRENT_TIMESTAMP"`
+	UpdatedAt    time.Time      `gorm:"not null;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
+	DeletedAt    gorm.DeletedAt `gorm:"index"`
 }
 
 func (t *Tenant) BeforeCreate(tx *gorm.DB) error {

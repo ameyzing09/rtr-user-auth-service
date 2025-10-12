@@ -37,13 +37,16 @@ func newTenantTestEnv(t *testing.T) tenantTestEnv {
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.Tenant{}, &models.User{}, &models.Outbox{}, &models.IdempotencyKey{}); err != nil {
+	if err := db.AutoMigrate(&models.Tenant{}, &models.TenantArchive{}, &models.User{}, &models.Outbox{}, &models.IdempotencyKey{}, &models.Subscription{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
 	tenantRepo := repositories.NewGormTenantRepo(db)
+	tenantArchiveRepo := repositories.NewGormTenantArchiveRepo(db)
 	idempotencyRepo := repositories.NewGormIdempotencyRepo(db)
-	tenantService := services.NewTenantService(db, tenantRepo, idempotencyRepo)
+	subscriptionRepo := repositories.NewSubscriptionRepository(db)
+	subscriptionService := services.NewSubscriptionService(subscriptionRepo)
+	tenantService := services.NewTenantService(db, tenantRepo, tenantArchiveRepo, idempotencyRepo, subscriptionService)
 	handler := NewTenantCreateHandler(tenantService)
 
 	router := gin.New()
@@ -192,7 +195,7 @@ func TestTenantCreateHandler_SuperAdminFlow(t *testing.T) {
 	if err := json.Unmarshal(repeat.Body.Bytes(), &cached); err != nil {
 		t.Fatalf("failed to unmarshal cached response: %v", err)
 	}
-	if cached.Tenant.ID != resp.Tenant.ID {
+	if cached.Tenant.ID != resp.Tenant.ID || cached.TempPassword != resp.TempPassword {
 		t.Fatalf("expected cached response to match initial")
 	}
 

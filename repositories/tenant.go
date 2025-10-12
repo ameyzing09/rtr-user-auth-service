@@ -10,10 +10,12 @@ import (
 type TenantRepository interface {
 	Create(ctx context.Context, tenant *models.Tenant) error
 	Update(ctx context.Context, tenant *models.Tenant) error
+	Delete(ctx context.Context, id string) error
 	FindByID(ctx context.Context, id string) (*models.Tenant, error)
 	FindByDomain(ctx context.Context, domain string) (*models.Tenant, error)
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
 	ListAll(ctx context.Context) ([]models.Tenant, error)
+	ListPaginated(ctx context.Context, page, pageSize int) ([]models.Tenant, int, error)
 }
 
 type GormTenantRepo struct {
@@ -56,10 +58,34 @@ func (r *GormTenantRepo) FindBySlug(ctx context.Context, slug string) (*models.T
 	return &tenant, nil
 }
 
+func (r *GormTenantRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.Tenant{}).Error
+}
+
 func (r *GormTenantRepo) ListAll(ctx context.Context) ([]models.Tenant, error) {
 	var tenants []models.Tenant
 	if err := r.db.WithContext(ctx).Order("created_at DESC").Find(&tenants).Error; err != nil {
 		return nil, err
 	}
 	return tenants, nil
+}
+
+func (r *GormTenantRepo) ListPaginated(ctx context.Context, page, pageSize int) ([]models.Tenant, int, error) {
+	var tenants []models.Tenant
+	var total int64
+
+	// Get total count
+	if err := r.db.WithContext(ctx).Model(&models.Tenant{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Get paginated results
+	if err := r.db.WithContext(ctx).Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&tenants).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return tenants, int(total), nil
 }

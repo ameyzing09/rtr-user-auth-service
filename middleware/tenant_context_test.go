@@ -81,6 +81,36 @@ func (s *stubTenantRepo) ListAll(ctx context.Context) ([]models.Tenant, error) {
 	return items, nil
 }
 
+func (s *stubTenantRepo) Delete(ctx context.Context, id string) error {
+	if s.tenants == nil {
+		return nil
+	}
+	delete(s.tenants, id)
+	return nil
+}
+
+func (s *stubTenantRepo) ListPaginated(ctx context.Context, page, pageSize int) ([]models.Tenant, int, error) {
+	items := make([]models.Tenant, 0, len(s.tenants))
+	for _, tenant := range s.tenants {
+		copy := *tenant
+		items = append(items, copy)
+	}
+
+	// Simple pagination simulation
+	total := len(items)
+	offset := (page - 1) * pageSize
+	if offset >= total {
+		return []models.Tenant{}, total, nil
+	}
+
+	end := offset + pageSize
+	if end > total {
+		end = total
+	}
+
+	return items[offset:end], total, nil
+}
+
 func init() {
 	gin.SetMode(gin.TestMode)
 }
