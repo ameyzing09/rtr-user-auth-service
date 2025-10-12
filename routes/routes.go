@@ -26,45 +26,50 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 		tenantScope.GET("/settings", tenantSettingHandler.Get)
 	}
 
-	// Protected tenant routes (with tenant context and auth)
+	// Protected tenant routes (with tenant context, auth, and CSRF protection)
 	protectedRoute := r.Group("/")
-	protectedRoute.Use(middleware.TenantContext(tenantRepo), middleware.AuthMiddleware())
+	protectedRoute.Use(middleware.TenantContext(tenantRepo), middleware.AuthMiddleware(), middleware.CSRFProtection())
 	{
 		// Profile routes - all authenticated users can access their own profile
 		protectedRoute.GET("/me", userHandler.GetMe)
 		protectedRoute.POST("/me/change-password", userHandler.ChangePassword)
 		protectedRoute.POST("/logout", userHandler.Logout)
 
-		// User management - ADMIN and HR can manage users
-		protectedRoute.GET("/users", middleware.RequireAny(models.RoleAdmin, models.RoleHR), userHandler.ListUsers)
-		protectedRoute.POST("/users", middleware.RequireAny(models.RoleAdmin, models.RoleHR), userHandler.CreateUser)
+		// User management - requires member permissions
+		protectedRoute.GET("/users", middleware.RequirePermission(string(models.PermMemberAll)), userHandler.ListUsers)
+		protectedRoute.POST("/users", middleware.RequirePermission(string(models.PermMemberAll)), userHandler.CreateUser)
 
-		// Tenant settings - only ADMIN can update tenant settings
+		// Tenant settings - requires settings permissions
 		tenantScope := protectedRoute.Group("/tenant")
-		tenantScope.PUT("/settings", middleware.RequireRole(models.RoleAdmin), tenantSettingHandler.Put)
+		tenantScope.PUT("/settings", middleware.RequirePermission(string(models.PermSettingsAll)), tenantSettingHandler.Put)
 	}
 
-	// Superadmin control-plane routes (no tenant context)
+	// Superadmin control-plane routes (no tenant context, with CSRF protection)
 	admin := r.Group("/")
-	admin.Use(middleware.ControlPlaneScope(), middleware.AuthMiddleware())
+	admin.Use(middleware.ControlPlaneScope(), middleware.AuthMiddleware(), middleware.CSRFProtection())
 	{
 		admin.POST("/admin/logout", userHandler.Logout)
 
 		// Tenant CRUD operations
-		admin.GET("/admin/tenants", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.List)
-		admin.POST("/admin/tenant/create", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Create)
-		admin.GET("/admin/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Get)
-		admin.PUT("/admin/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Update)
-		admin.DELETE("/admin/tenant/:id", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Delete)
-		admin.GET("/tenant/:id/status", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Status)
-		admin.POST("/tenant/:id/retry", middleware.RequireRole(models.RoleSuperAdmin), tenantAdminHandler.Retry)
+		admin.GET("/admin/tenants", middleware.RequirePermission(string(models.PermTenantList)), tenantAdminHandler.List)
+		admin.POST("/admin/tenant/create", middleware.RequirePermission(string(models.PermTenantCreate)), tenantAdminHandler.Create)
+		admin.GET("/admin/tenant/:id", middleware.RequirePermission(string(models.PermTenantRead)), tenantAdminHandler.Get)
+		admin.PUT("/admin/tenant/:id", middleware.RequirePermission(string(models.PermTenantUpdate)), tenantAdminHandler.Update)
+		admin.DELETE("/admin/tenant/:id", middleware.RequirePermission(string(models.PermTenantUpdate)), tenantAdminHandler.Delete)
+		admin.GET("/tenant/:id/status", middleware.RequirePermission(string(models.PermTenantStatus)), tenantAdminHandler.Status)
+		admin.POST("/tenant/:id/retry", middleware.RequirePermission(string(models.PermTenantStatus)), tenantAdminHandler.Retry)
 
-		// Subscription management
-		admin.GET("/admin/tenant/:id/subscription", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Get)
-		admin.POST("/admin/tenant/:id/subscription/activate", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Activate)
-		admin.POST("/admin/tenant/:id/subscription/suspend", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Suspend)
-		admin.POST("/admin/tenant/:id/subscription/resume", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Resume)
-		admin.POST("/admin/tenant/:id/subscription/cancel", middleware.RequireRole(models.RoleSuperAdmin), subscriptionAdminHandler.Cancel)
-		admin.POST("/admin/change-password", middleware.RequireRole(models.RoleSuperAdmin), userHandler.SuperadminChangePassword)
+		// Tenant archive operations
+		admin.GET("/admin/tenants/archived", middleware.RequirePermission(string(models.PermTenantList)), tenantAdminHandler.ListArchived)
+		admin.GET("/admin/tenant/:id/archived", middleware.RequirePermission(string(models.PermTenantRead)), tenantAdminHandler.GetArchived)
+
+		// Subscription management - requires tenant:update permission
+		admin.GET("/admin/tenant/:id/subscription", middleware.RequirePermission(string(models.PermTenantRead)), subscriptionAdminHandler.Get)
+		admin.POST("/admin/tenant/:id/subscription/activate", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Activate)
+		admin.POST("/admin/tenant/:id/subscription/suspend", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Suspend)
+		admin.POST("/admin/tenant/:id/subscription/resume", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Resume)
+		admin.POST("/admin/tenant/:id/subscription/cancel", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Cancel)
+		admin.POST("/admin/change-password", middleware.RequirePermission(string(models.PermTenantUpdate)), userHandler.SuperadminChangePassword)
 	}
 }
+ 

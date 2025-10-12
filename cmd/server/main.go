@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"rtr-user-auth-service/config"
 	"rtr-user-auth-service/handlers"
@@ -24,6 +25,9 @@ func main() {
 }
 
 func run() error {
+	// Enforce UTC timezone for all time operations
+	time.Local = time.UTC
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -49,7 +53,7 @@ func run() error {
 	repos := initRepositories(dbInstance)
 
 	// Initialize services
-	svcs := initServices(dbInstance, repos, cfg)
+	svcs := initServices(dbInstance, repos)
 
 	// Initialize handlers
 	hndlrs := initHandlers(svcs)
@@ -70,6 +74,7 @@ func run() error {
 type repositoriesContainer struct {
 	UserRepo          services.UserRepository
 	TenantRepo        services.TenantRepository
+	TenantArchiveRepo services.TenantArchiveRepository
 	TenantSettingRepo services.TenantSettingRepository
 	IdempotencyRepo   services.IdempotencyRepository
 	SubscriptionRepo  repositories.SubscriptionRepository
@@ -79,6 +84,7 @@ func initRepositories(db *gorm.DB) *repositoriesContainer {
 	return &repositoriesContainer{
 		UserRepo:          repositories.NewGormUserRepo(db),
 		TenantRepo:        repositories.NewGormTenantRepo(db),
+		TenantArchiveRepo: repositories.NewGormTenantArchiveRepo(db),
 		TenantSettingRepo: repositories.NewGormTenantSettingRepo(db),
 		IdempotencyRepo:   repositories.NewGormIdempotencyRepo(db),
 		SubscriptionRepo:  repositories.NewSubscriptionRepository(db),
@@ -92,12 +98,12 @@ type servicesContainer struct {
 	SubscriptionService  services.SubscriptionService
 }
 
-func initServices(db *gorm.DB, repos *repositoriesContainer, cfg *config.Config) *servicesContainer {
+func initServices(db *gorm.DB, repos *repositoriesContainer) *servicesContainer {
 	subscriptionService := services.NewSubscriptionService(repos.SubscriptionRepo)
 	return &servicesContainer{
 		AuthService:          services.NewAuthService(db, repos.UserRepo, repos.TenantRepo, subscriptionService),
 		TenantSettingService: services.NewTenantSettingService(repos.TenantSettingRepo),
-		TenantService:        services.NewTenantService(db, repos.TenantRepo, repos.IdempotencyRepo, subscriptionService),
+		TenantService:        services.NewTenantService(db, repos.TenantRepo, repos.TenantArchiveRepo, repos.IdempotencyRepo, subscriptionService),
 		SubscriptionService:  subscriptionService,
 	}
 }

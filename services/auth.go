@@ -49,16 +49,20 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, U
 		}
 	}
 
-	token, exp, err := utils.SignJWT(user.ID, user.TenantID, user.Email, string(user.Role), 24*time.Hour)
+	// Get permissions for this role
+	permissions := models.GetRolePermissions(user.Role)
+
+	token, exp, err := utils.SignJWT(user.ID, user.TenantID, user.Email, string(user.Role), permissions, 24*time.Hour)
 	if err != nil {
 		return AuthToken{}, UserRead{}, err
 	}
 	return AuthToken{Token: token, ExpiresAt: exp}, UserRead{
-		ID:       user.ID,
-		TenantID: user.TenantID,
-		Name:     user.Name,
-		Email:    user.Email,
-		Role:     user.Role,
+		ID:          user.ID,
+		TenantID:    user.TenantID,
+		Name:        user.Name,
+		Email:       user.Email,
+		Role:        user.Role,
+		Permissions: permissions,
 	}, nil
 }
 
@@ -67,12 +71,16 @@ func (s *authService) GetMe(ctx context.Context, userID, tenantID string) (UserR
 	if err != nil {
 		return UserRead{}, err
 	}
+
+	permissions := models.GetRolePermissions(user.Role)
+
 	return UserRead{
-		ID:       user.ID,
-		TenantID: user.TenantID,
-		Name:     user.Name,
-		Email:    user.Email,
-		Role:     user.Role,
+		ID:          user.ID,
+		TenantID:    user.TenantID,
+		Name:        user.Name,
+		Email:       user.Email,
+		Role:        user.Role,
+		Permissions: permissions,
 	}, nil
 }
 
@@ -83,12 +91,14 @@ func (s *authService) ListUsers(ctx context.Context, tenantID string) ([]UserRea
 	}
 	output := make([]UserRead, 0, len(list))
 	for _, user := range list {
+		permissions := models.GetRolePermissions(user.Role)
 		output = append(output, UserRead{
-			ID:       user.ID,
-			TenantID: user.TenantID,
-			Name:     user.Name,
-			Email:    user.Email,
-			Role:     user.Role,
+			ID:          user.ID,
+			TenantID:    user.TenantID,
+			Name:        user.Name,
+			Email:       user.Email,
+			Role:        user.Role,
+			Permissions: permissions,
 		})
 	}
 	return output, nil
@@ -189,8 +199,9 @@ func (s *authService) SuperadminChangePassword(ctx context.Context, actor UserRe
 }
 
 func toRead(u *models.User) UserRead {
+	permissions := models.GetRolePermissions(u.Role)
 	return UserRead{
 		ID: u.ID, TenantID: u.TenantID, Name: u.Name, Email: u.Email,
-		Role: u.Role, MustChangePassword: u.ForcePasswordReset,
+		Role: u.Role, Permissions: permissions, MustChangePassword: u.ForcePasswordReset,
 	}
 }

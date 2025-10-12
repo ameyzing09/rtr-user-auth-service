@@ -17,6 +17,7 @@ type UserRead struct {
 	Name               string
 	Email              string
 	Role               models.Role
+	Permissions        []string
 	MustChangePassword bool
 }
 
@@ -74,6 +75,13 @@ type TenantRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*models.Tenant, error)
 	ListAll(ctx context.Context) ([]models.Tenant, error)
 	ListPaginated(ctx context.Context, page, pageSize int) ([]models.Tenant, int, error)
+}
+
+type TenantArchiveRepository interface {
+	Create(ctx context.Context, archive *models.TenantArchive) error
+	FindByID(ctx context.Context, id string) (*models.TenantArchive, error)
+	FindByOriginalTenantID(ctx context.Context, tenantID string) (*models.TenantArchive, error)
+	ListPaginated(ctx context.Context, page, pageSize int) ([]models.TenantArchive, int, error)
 }
 
 type TenantSettingRepository interface {
@@ -157,6 +165,29 @@ type TenantListResult struct {
 	PageSize int
 }
 
+type TenantArchiveDTO struct {
+	ID           string
+	Name         string
+	Domain       *string
+	Slug         *string
+	Plan         *models.Plan
+	Status       models.TenantStatus
+	CreatedBy    *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	FailedReason *string
+	DeletedBy    string
+	DeletedAt    time.Time
+	DeleteReason *string
+}
+
+type TenantArchiveListResult struct {
+	Archives []TenantArchiveDTO
+	Total    int
+	Page     int
+	PageSize int
+}
+
 type TenantService interface {
 	OnboardTenantAsync(ctx context.Context, actor UserRead, req TenantOnboardAsyncRequest, keyHash, requestHash string) (TenantOnboardAsyncResult, bool, error)
 	CreateTenant(ctx context.Context, req CreateTenantReq, actorID string) (TenantDTO, error)
@@ -166,4 +197,8 @@ type TenantService interface {
 	ListTenants(ctx context.Context, page, pageSize int) (TenantListResult, error)
 	GetTenantStatus(ctx context.Context, tenantID string) (TenantStatusView, error)
 	RetryProvisioning(ctx context.Context, actor UserRead, tenantID string) error
+
+	// Archive management
+	ListArchivedTenants(ctx context.Context, page, pageSize int) (TenantArchiveListResult, error)
+	GetArchivedTenant(ctx context.Context, id string) (TenantArchiveDTO, error)
 }

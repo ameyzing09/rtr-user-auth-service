@@ -7,3 +7,9 @@
 /docs
 
 .exe
+tmp/build-errors.log
+tmp/main.exe
+tmp/main.exe~
+.claude/settings.local.json
+tmp/main.exe
+tmp/main.exe~

@@ -89,7 +89,7 @@ func (h *TenantCreateHandler) Create(c *gin.Context) {
 	if cached {
 		status = http.StatusOK
 	}
-
+	
 	c.JSON(status, response)
 }
 
@@ -345,4 +345,90 @@ func planToStringPointer(plan *models.Plan) *string {
 	}
 	str := string(*plan)
 	return &str
+}
+
+// Archive endpoints
+func (h *TenantCreateHandler) ListArchived(c *gin.Context) {
+	_ = ActorFromContext(c)
+
+	page := 1
+	pageSize := 20
+
+	if p := c.Query("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+
+	if ps := c.Query("page_size"); ps != "" {
+		if parsed, err := strconv.Atoi(ps); err == nil && parsed > 0 && parsed <= 100 {
+			pageSize = parsed
+		}
+	}
+
+	result, err := h.service.ListArchivedTenants(c.Request.Context(), page, pageSize)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	response := make([]map[string]interface{}, len(result.Archives))
+	for i, archive := range result.Archives {
+		response[i] = map[string]interface{}{
+			"id":            archive.ID,
+			"name":          archive.Name,
+			"domain":        archive.Domain,
+			"slug":          archive.Slug,
+			"plan":          planToStringPointer(archive.Plan),
+			"status":        string(archive.Status),
+			"created_by":    archive.CreatedBy,
+			"created_at":    archive.CreatedAt.UTC().Format(time.RFC3339),
+			"updated_at":    archive.UpdatedAt.UTC().Format(time.RFC3339),
+			"failed_reason": archive.FailedReason,
+			"deleted_by":    archive.DeletedBy,
+			"deleted_at":    archive.DeletedAt.UTC().Format(time.RFC3339),
+			"delete_reason": archive.DeleteReason,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"archives":  response,
+		"total":     result.Total,
+		"page":      result.Page,
+		"page_size": result.PageSize,
+	})
+}
+
+func (h *TenantCreateHandler) GetArchived(c *gin.Context) {
+	_ = ActorFromContext(c)
+
+	tenantID := strings.TrimSpace(c.Param("id"))
+	if tenantID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": errcodes.ErrCodeValidation, "message": "tenant id is required"})
+		return
+	}
+
+	archive, err := h.service.GetArchivedTenant(c.Request.Context(), tenantID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	response := map[string]interface{}{
+		"id":            archive.ID,
+		"name":          archive.Name,
+		"domain":        archive.Domain,
+		"slug":          archive.Slug,
+		"plan":          planToStringPointer(archive.Plan),
+		"status":        string(archive.Status),
+		"created_by":    archive.CreatedBy,
+		"created_at":    archive.CreatedAt.UTC().Format(time.RFC3339),
+		"updated_at":    archive.UpdatedAt.UTC().Format(time.RFC3339),
+		"failed_reason": archive.FailedReason,
+		"deleted_by":    archive.DeletedBy,
+		"deleted_at":    archive.DeletedAt.UTC().Format(time.RFC3339),
+		"delete_reason": archive.DeleteReason,
+	}
+
+	c.JSON(http.StatusOK, response)
 }

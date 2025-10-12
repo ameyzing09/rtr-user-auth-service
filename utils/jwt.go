@@ -10,14 +10,15 @@ import (
 )
 
 type Claims struct {
-	UserID   string `json:"uid"`
-	TenantID string `json:"tid"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	UserID      string   `json:"uid"`
+	TenantID    string   `json:"tid"`
+	Email       string   `json:"email"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
 	jwt.RegisteredClaims
 }
 
-func SignJWT(userID, tenantID, email, role string, ttl time.Duration) (string, time.Time, error) {
+func SignJWT(userID, tenantID, email, role string, permissions []string, ttl time.Duration) (string, time.Time, error) {
 	cfg := config.Get()
 	if cfg == nil {
 		return "", time.Time{}, fmt.Errorf("config not initialized")
@@ -26,9 +27,11 @@ func SignJWT(userID, tenantID, email, role string, ttl time.Duration) (string, t
 	secret := cfg.JWT.Secret
 	exp := time.Now().Add(ttl)
 	claims := &Claims{
-		UserID:   userID,
-		TenantID: tenantID,
-		Role:     role,
+		UserID:      userID,
+		TenantID:    tenantID,
+		Email:       email,
+		Role:        role,
+		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

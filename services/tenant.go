@@ -33,18 +33,20 @@ func (e slugConflictError) Suggestions() []string {
 var _ TenantService = (*tenantService)(nil)
 
 type tenantService struct {
-	db              *gorm.DB
-	tenantRepo      TenantRepository
-	idempotencyRepo IdempotencyRepository
-	subscriptionSvc SubscriptionService
+	db                *gorm.DB
+	tenantRepo        TenantRepository
+	tenantArchiveRepo TenantArchiveRepository
+	idempotencyRepo   IdempotencyRepository
+	subscriptionSvc   SubscriptionService
 }
 
-func NewTenantService(db *gorm.DB, tr TenantRepository, idr IdempotencyRepository, subSvc SubscriptionService) *tenantService {
+func NewTenantService(db *gorm.DB, tr TenantRepository, tar TenantArchiveRepository, idr IdempotencyRepository, subSvc SubscriptionService) *tenantService {
 	return &tenantService{
-		db:              db,
-		tenantRepo:      tr,
-		idempotencyRepo: idr,
-		subscriptionSvc: subSvc,
+		db:                db,
+		tenantRepo:        tr,
+		tenantArchiveRepo: tar,
+		idempotencyRepo:   idr,
+		subscriptionSvc:   subSvc,
 	}
 }
 
@@ -492,7 +494,7 @@ func (s *tenantService) DeleteTenant(ctx context.Context, id string, actorID str
 	}
 
 	// Check if tenant exists
-	_, err := s.tenantRepo.FindByID(ctx, id)
+	tenant, err := s.tenantRepo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return domain.ErrTenantNotFound
@@ -500,14 +502,29 @@ func (s *tenantService) DeleteTenant(ctx context.Context, id string, actorID str
 		return err
 	}
 
-	// Delete subscription first (will be handled by CASCADE, but let's be explicit)
-	if err := s.subscriptionSvc.DeleteSubscription(ctx, id); err != nil {
-		// Log error but continue with tenant deletion
-		utils.Debug("[TenantService] Error deleting subscription for tenant %s: %v", id, err)
-	}
+	// Use transaction for archiving and soft delete
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Create archive record
+		archive := &models.TenantArchive{}
+		deleteReason := "Tenant deleted by admin"
+		archive.FromTenant(tenant, actorID, &deleteReason)
 
-	// Delete tenant (this will cascade to subscription due to FK constraint)
-	return s.tenantRepo.Delete(ctx, id)
+		if err := tx.Create(archive).Error; err != nil {
+			return err
+		}
+
+		// Update tenant status to DELETED
+		if err := tx.Model(tenant).Update("status", models.TenantDeleted).Error; err != nil {
+			return err
+		}
+
+		// Soft delete the tenant (sets deleted_at)
+		if err := tx.Delete(tenant).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (s *tenantService) ListTenants(ctx context.Context, page, pageSize int) (TenantListResult, error) {
@@ -521,6 +538,11 @@ func (s *tenantService) ListTenants(ctx context.Context, page, pageSize int) (Te
 	tenants, total, err := s.tenantRepo.ListPaginated(ctx, page, pageSize)
 	if err != nil {
 		return TenantListResult{}, err
+	}
+
+	utils.Debug("[TenantService] ListTenants found %d tenants (total: %d, page: %d, pageSize: %d)", len(tenants), total, page, pageSize)
+	for i, tenant := range tenants {
+		utils.Debug("[TenantService] Tenant[%d]: ID=%s, Name=%s, CreatedAt=%v, UpdatedAt=%v", i, tenant.ID, tenant.Name, tenant.CreatedAt, tenant.UpdatedAt)
 	}
 
 	tenantDTOs := make([]TenantDTO, len(tenants))
@@ -544,5 +566,77 @@ func (s *tenantService) ListTenants(ctx context.Context, page, pageSize int) (Te
 		Total:    total,
 		Page:     page,
 		PageSize: pageSize,
+	}, nil
+}
+
+// ListArchivedTenants returns paginated list of archived tenants
+func (s *tenantService) ListArchivedTenants(ctx context.Context, page, pageSize int) (TenantArchiveListResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	archives, total, err := s.tenantArchiveRepo.ListPaginated(ctx, page, pageSize)
+	if err != nil {
+		return TenantArchiveListResult{}, err
+	}
+
+	archiveDTOs := make([]TenantArchiveDTO, len(archives))
+	for i, archive := range archives {
+		archiveDTOs[i] = TenantArchiveDTO{
+			ID:           archive.ID,
+			Name:         archive.Name,
+			Domain:       archive.Domain,
+			Slug:         archive.Slug,
+			Plan:         archive.Plan,
+			Status:       archive.Status,
+			CreatedBy:    archive.CreatedBy,
+			CreatedAt:    archive.CreatedAt,
+			UpdatedAt:    archive.UpdatedAt,
+			FailedReason: archive.FailedReason,
+			DeletedBy:    archive.DeletedBy,
+			DeletedAt:    archive.DeletedAt,
+			DeleteReason: archive.DeleteReason,
+		}
+	}
+
+	return TenantArchiveListResult{
+		Archives: archiveDTOs,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
+}
+
+// GetArchivedTenant returns archived tenant by ID
+func (s *tenantService) GetArchivedTenant(ctx context.Context, id string) (TenantArchiveDTO, error) {
+	if strings.TrimSpace(id) == "" {
+		return TenantArchiveDTO{}, ErrInvalidInput
+	}
+
+	archive, err := s.tenantArchiveRepo.FindByOriginalTenantID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return TenantArchiveDTO{}, domain.ErrTenantNotFound
+		}
+		return TenantArchiveDTO{}, err
+	}
+
+	return TenantArchiveDTO{
+		ID:           archive.ID,
+		Name:         archive.Name,
+		Domain:       archive.Domain,
+		Slug:         archive.Slug,
+		Plan:         archive.Plan,
+		Status:       archive.Status,
+		CreatedBy:    archive.CreatedBy,
+		CreatedAt:    archive.CreatedAt,
+		UpdatedAt:    archive.UpdatedAt,
+		FailedReason: archive.FailedReason,
+		DeletedBy:    archive.DeletedBy,
+		DeletedAt:    archive.DeletedAt,
+		DeleteReason: archive.DeleteReason,
 	}, nil
 }

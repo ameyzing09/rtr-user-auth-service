@@ -37,15 +37,16 @@ func newTenantTestEnv(t *testing.T) tenantTestEnv {
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.Tenant{}, &models.User{}, &models.Outbox{}, &models.IdempotencyKey{}, &models.Subscription{}); err != nil {
+	if err := db.AutoMigrate(&models.Tenant{}, &models.TenantArchive{}, &models.User{}, &models.Outbox{}, &models.IdempotencyKey{}, &models.Subscription{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 
 	tenantRepo := repositories.NewGormTenantRepo(db)
+	tenantArchiveRepo := repositories.NewGormTenantArchiveRepo(db)
 	idempotencyRepo := repositories.NewGormIdempotencyRepo(db)
 	subscriptionRepo := repositories.NewSubscriptionRepository(db)
 	subscriptionService := services.NewSubscriptionService(subscriptionRepo)
-	tenantService := services.NewTenantService(db, tenantRepo, idempotencyRepo, subscriptionService)
+	tenantService := services.NewTenantService(db, tenantRepo, tenantArchiveRepo, idempotencyRepo, subscriptionService)
 	handler := NewTenantCreateHandler(tenantService)
 
 	router := gin.New()
