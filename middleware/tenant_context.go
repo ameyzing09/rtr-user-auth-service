@@ -86,7 +86,7 @@ func AuthenticatedTenantContext(repo repositories.TenantRepository) gin.HandlerF
 			return // Error already handled by findTenantByID
 		}
 
-		utils.Debug("[AuthenticatedTenantContext] Successfully resolved tenant: ID=%s, Name=%s, Domain=%s",
+		utils.Debug("[AuthenticatedTenantContext] Successfully resolved tenant: ID=%q, Name=%q, Domain=%q",
 			tenant.ID, tenant.Name, tenantDomainValue(tenant))
 
 		c.Set(CtxTenantIDKey, tenant.ID)
