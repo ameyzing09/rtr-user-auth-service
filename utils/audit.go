@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"net"
 	"net/http"
 	"strings"
 )
@@ -59,11 +60,13 @@ func ExtractClientIP(r *http.Request) string {
 	}
 
 	// Fall back to RemoteAddr
-	// RemoteAddr format is "IP:port", so we need to strip the port
-	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
-		return r.RemoteAddr[:idx]
+	// RemoteAddr format is "IP:port" for IPv4 or "[IPv6]:port" for IPv6
+	// Use net.SplitHostPort to properly handle both IPv4 and IPv6 addresses
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
 	}
 
+	// If SplitHostPort fails (e.g., no port), return as-is
 	return r.RemoteAddr
 }
 

@@ -10,6 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Audit reason format strings for consistency
+const (
+	reasonMissingPermission     = "Missing permission: %s"
+	reasonMissingAnyPermission  = "Missing any of permissions: %v"
+	reasonMissingAllPermissions = "Missing all permissions: %v"
+)
+
 // RequirePermission creates a middleware that requires a specific permission
 func RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -30,7 +37,7 @@ func RequirePermission(permission string) gin.HandlerFunc {
 			if auditSvc := GetAuditService(c); auditSvc != nil {
 				clientIP := GetClientIP(c)
 				userAgent := GetUserAgent(c)
-				reason := fmt.Sprintf("Missing permission: %s", permission)
+				reason := fmt.Sprintf(reasonMissingPermission, permission)
 				actorRoleStr := string(actor.Role)
 				_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
 					Action:        utils.AuditActionPermissionDenied,
@@ -77,7 +84,7 @@ func RequireAnyPermission(permissions ...string) gin.HandlerFunc {
 			if auditSvc := GetAuditService(c); auditSvc != nil {
 				clientIP := GetClientIP(c)
 				userAgent := GetUserAgent(c)
-				reason := fmt.Sprintf("Missing any of permissions: %v", permissions)
+				reason := fmt.Sprintf(reasonMissingAnyPermission, permissions)
 				actorRoleStr := string(actor.Role)
 				_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
 					Action:        utils.AuditActionPermissionDenied,
@@ -124,7 +131,7 @@ func RequireAllPermissions(permissions ...string) gin.HandlerFunc {
 			if auditSvc := GetAuditService(c); auditSvc != nil {
 				clientIP := GetClientIP(c)
 				userAgent := GetUserAgent(c)
-				reason := fmt.Sprintf("Missing all permissions: %v", permissions)
+				reason := fmt.Sprintf(reasonMissingAllPermissions, permissions)
 				actorRoleStr := string(actor.Role)
 				_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
 					Action:        utils.AuditActionPermissionDenied,
