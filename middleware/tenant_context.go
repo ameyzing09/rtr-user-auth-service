@@ -72,7 +72,7 @@ func AuthenticatedTenantContext(repo repositories.TenantRepository) gin.HandlerF
 		// Get tenant ID from actor
 		tenantID := actor.TenantID
 		if tenantID == "" {
-			utils.Debug("[AuthenticatedTenantContext] Actor has no tenant ID: userID=%s", actor.ID)
+			utils.Debug("[AuthenticatedTenantContext] Actor has no tenant ID: userID=%q", actor.ID)
 			abortWithError(c, http.StatusForbidden, "no tenant associated with user")
 			return
 		}
