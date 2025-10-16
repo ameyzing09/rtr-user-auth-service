@@ -95,6 +95,21 @@ func AuthMiddleware() gin.HandlerFunc {
 
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 				utils.Debug("[AuthMiddleware] Missing or invalid Authorization header and no cookie")
+
+				// Audit: Authentication failed - missing credentials
+				if auditSvc := GetAuditService(c); auditSvc != nil {
+					clientIP := GetClientIP(c)
+					userAgent := GetUserAgent(c)
+					reason := "Missing authentication credentials"
+					_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+						Action:    utils.AuditActionLoginFailed,
+						Status:    models.AuditStatusDenied,
+						Reason:    &reason,
+						IPAddress: utils.StringPtr(clientIP),
+						UserAgent: utils.StringPtr(userAgent),
+					})
+				}
+
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 				return
 			}
@@ -122,6 +137,21 @@ func AuthMiddleware() gin.HandlerFunc {
 			}
 
 			utils.Debug("[AuthMiddleware] Token validation failed: error=%v, valid=%t", err, token != nil && token.Valid)
+
+			// Audit: Authentication failed - invalid token
+			if auditSvc := GetAuditService(c); auditSvc != nil {
+				clientIP := GetClientIP(c)
+				userAgent := GetUserAgent(c)
+				reason := "Invalid or expired token"
+				_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+					Action:    utils.AuditActionLoginFailed,
+					Status:    models.AuditStatusDenied,
+					Reason:    &reason,
+					IPAddress: utils.StringPtr(clientIP),
+					UserAgent: utils.StringPtr(userAgent),
+				})
+			}
+
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
@@ -138,6 +168,28 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		if tid := c.GetString(CtxTenantIDKey); tid != "" && actor.Role != models.RoleSuperAdmin && tid != actor.TenantID {
 			utils.Warn("[AuthMiddleware] Tenant mismatch: requestTenant=%s actorTenant=%s actorRole=%s", tid, actor.TenantID, actor.Role)
+
+			// Audit: Tenant access denied
+			if auditSvc := GetAuditService(c); auditSvc != nil {
+				clientIP := GetClientIP(c)
+				userAgent := GetUserAgent(c)
+				reason := "Tenant mismatch"
+				actorRoleStr := string(actor.Role)
+				_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+					Action:             utils.AuditActionTenantAccessDenied,
+					ActorID:            &actor.ID,
+					ActorTenantID:      &actor.TenantID,
+					ActorRole:          &actorRoleStr,
+					TargetTenantID:     &tid,
+					TargetResourceType: utils.StringPtr("tenant"),
+					TargetResourceID:   &tid,
+					Status:             models.AuditStatusDenied,
+					Reason:             &reason,
+					IPAddress:          utils.StringPtr(clientIP),
+					UserAgent:          utils.StringPtr(userAgent),
+				})
+			}
+
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access to this tenant is forbidden"})
 			return
 		}

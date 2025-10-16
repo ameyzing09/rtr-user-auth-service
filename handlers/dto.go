@@ -24,6 +24,7 @@ type LoginResponse struct {
 	ExpiresAt        time.Time         `json:"ExpiresAt"`
 	User             services.UserRead `json:"User"`
 	PlatformBranding *PlatformBranding `json:"PlatformBranding,omitempty"`
+	TenantBranding   *TenantBranding   `json:"TenantBranding,omitempty"`
 }
 
 type PlatformBranding struct {
@@ -34,6 +35,14 @@ type PlatformBranding struct {
 	NavbarTitle  string            `json:"navbar_title"`
 	SidebarTitle string            `json:"sidebar_title"`
 	SidebarLinks []PlatformNavItem `json:"sidebar_links"`
+}
+
+type TenantBranding struct {
+	Name         string `json:"name"`
+	LogoURL      string `json:"logo_url"`
+	PrimaryColor string `json:"primary_color"`
+	AccentColor  string `json:"accent_color"`
+	NavbarTitle  string `json:"navbar_title"`
 }
 
 type PlatformNavItem struct {

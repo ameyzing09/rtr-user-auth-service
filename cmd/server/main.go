@@ -59,7 +59,7 @@ func run() error {
 	hndlrs := initHandlers(svcs)
 
 	// Setup router
-	router := setupRouter(hndlrs, repos.TenantRepo, cfg)
+	router := setupRouter(hndlrs, repos.TenantRepo, svcs.AuditLogService, cfg)
 
 	// Start server
 	addr := ":" + cfg.Server.Port
@@ -78,6 +78,7 @@ type repositoriesContainer struct {
 	TenantSettingRepo services.TenantSettingRepository
 	IdempotencyRepo   services.IdempotencyRepository
 	SubscriptionRepo  repositories.SubscriptionRepository
+	AuditLogRepo      repositories.AuditLogRepository
 }
 
 func initRepositories(db *gorm.DB) *repositoriesContainer {
@@ -88,6 +89,7 @@ func initRepositories(db *gorm.DB) *repositoriesContainer {
 		TenantSettingRepo: repositories.NewGormTenantSettingRepo(db),
 		IdempotencyRepo:   repositories.NewGormIdempotencyRepo(db),
 		SubscriptionRepo:  repositories.NewSubscriptionRepository(db),
+		AuditLogRepo:      repositories.NewAuditLogRepository(db),
 	}
 }
 
@@ -96,15 +98,18 @@ type servicesContainer struct {
 	TenantSettingService services.TenantSettingService
 	TenantService        services.TenantService
 	SubscriptionService  services.SubscriptionService
+	AuditLogService      services.AuditLogService
 }
 
 func initServices(db *gorm.DB, repos *repositoriesContainer) *servicesContainer {
 	subscriptionService := services.NewSubscriptionService(repos.SubscriptionRepo)
+	auditLogService := services.NewAuditLogService(repos.AuditLogRepo)
 	return &servicesContainer{
 		AuthService:          services.NewAuthService(db, repos.UserRepo, repos.TenantRepo, subscriptionService),
 		TenantSettingService: services.NewTenantSettingService(repos.TenantSettingRepo),
 		TenantService:        services.NewTenantService(db, repos.TenantRepo, repos.TenantArchiveRepo, repos.IdempotencyRepo, subscriptionService),
 		SubscriptionService:  subscriptionService,
+		AuditLogService:      auditLogService,
 	}
 }
 
@@ -117,17 +122,18 @@ type handlersContainer struct {
 
 func initHandlers(svcs *servicesContainer) *handlersContainer {
 	return &handlersContainer{
-		UserHandler:              handlers.NewUserHandler(svcs.AuthService),
+		UserHandler:              handlers.NewUserHandler(svcs.AuthService, svcs.TenantSettingService),
 		TenantSettingHandler:     handlers.NewTenantSettingHandler(svcs.TenantSettingService),
 		TenantAdminHandler:       handlers.NewTenantCreateHandler(svcs.TenantService),
 		SubscriptionAdminHandler: handlers.NewSubscriptionAdminHandler(svcs.SubscriptionService),
 	}
 }
 
-func setupRouter(hndlrs *handlersContainer, tenantRepo services.TenantRepository, cfg *config.Config) *gin.Engine {
+func setupRouter(hndlrs *handlersContainer, tenantRepo services.TenantRepository, auditSvc services.AuditLogService, cfg *config.Config) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.CORS())
+	router.Use(middleware.AuditMiddleware(auditSvc))
 
 	routes.RegisterRoutes(
 		router,

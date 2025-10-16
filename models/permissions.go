@@ -30,6 +30,7 @@ const (
 
 	// Jobs (wildcard and granular)
 	PermJobAll    Permission = "job:*"
+	PermJobList   Permission = "job:list"
 	PermJobCreate Permission = "job:create"
 	PermJobRead   Permission = "job:read"
 	PermJobUpdate Permission = "job:update"
@@ -37,6 +38,7 @@ const (
 
 	// Applications (wildcard and granular)
 	PermApplicationAll    Permission = "application:*"
+	PermApplicationList   Permission = "application:list"
 	PermApplicationCreate Permission = "application:create"
 	PermApplicationRead   Permission = "application:read"
 	PermApplicationUpdate Permission = "application:update"
@@ -44,6 +46,7 @@ const (
 
 	// Pipeline (wildcard and granular)
 	PermPipelineAll    Permission = "pipeline:*"
+	PermPipelineList   Permission = "pipeline:list"
 	PermPipelineCreate Permission = "pipeline:create"
 	PermPipelineRead   Permission = "pipeline:read"
 	PermPipelineUpdate Permission = "pipeline:update"
@@ -51,6 +54,7 @@ const (
 
 	// Team Members (wildcard and granular)
 	PermMemberAll    Permission = "member:*"
+	PermMemberList   Permission = "member:list"
 	PermMemberCreate Permission = "member:create"
 	PermMemberRead   Permission = "member:read"
 	PermMemberUpdate Permission = "member:update"
@@ -58,6 +62,7 @@ const (
 
 	// Interviews (wildcard and granular)
 	PermInterviewAll    Permission = "interview:*"
+	PermInterviewList   Permission = "interview:list"
 	PermInterviewCreate Permission = "interview:create"
 	PermInterviewRead   Permission = "interview:read"
 	PermInterviewUpdate Permission = "interview:update"
@@ -79,6 +84,14 @@ const (
 	PermIntegrationsRead   Permission = "integrations:read"
 	PermIntegrationsUpdate Permission = "integrations:update"
 	PermIntegrationsDelete Permission = "integrations:delete"
+
+	// Feedback (wildcard and granular)
+	PermFeedbackAll    Permission = "feedback:*"
+	PermFeedbackList   Permission = "feedback:list"
+	PermFeedbackCreate Permission = "feedback:create"
+	PermFeedbackRead   Permission = "feedback:read"
+	PermFeedbackUpdate Permission = "feedback:update"
+	PermFeedbackDelete Permission = "feedback:delete"
 )
 
 // HasPermission checks if a user's permissions include the required permission.

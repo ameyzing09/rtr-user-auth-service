@@ -14,6 +14,7 @@ import (
 
 	"rtr-user-auth-service/models"
 	"rtr-user-auth-service/repositories"
+	"rtr-user-auth-service/services"
 	"rtr-user-auth-service/utils"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +41,60 @@ var (
 	errAborted = errors.New("aborted")
 )
 
+// AuthenticatedTenantContext sets the tenant context based on the authenticated user's tenant.
+// This middleware must run AFTER AuthMiddleware and does not require signed tenant headers.
+// It derives the tenant from the authenticated user's JWT token, eliminating the need
+// for client-side tenant secrets.
+func AuthenticatedTenantContext(repo repositories.TenantRepository) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get the authenticated actor from context (set by AuthMiddleware)
+		actorValue, exists := c.Get("actor")
+		if !exists {
+			utils.Debug("[AuthenticatedTenantContext] No actor found in context")
+			abortWithError(c, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		actor, ok := actorValue.(services.UserRead)
+		if !ok {
+			utils.Debug("[AuthenticatedTenantContext] Invalid actor type in context")
+			abortWithError(c, http.StatusInternalServerError, "invalid authentication context")
+			return
+		}
+
+		// SuperAdmins don't have a tenant context
+		if actor.Role == models.RoleSuperAdmin {
+			utils.Debug("[AuthenticatedTenantContext] SuperAdmin detected, skipping tenant context")
+			c.Next()
+			return
+		}
+
+		// Get tenant ID from actor
+		tenantID := actor.TenantID
+		if tenantID == "" {
+			utils.Debug("[AuthenticatedTenantContext] Actor has no tenant ID: userID=%q", actor.ID)
+			abortWithError(c, http.StatusForbidden, "no tenant associated with user")
+			return
+		}
+
+		utils.Debug("[AuthenticatedTenantContext] Resolving tenant for authenticated user: userID=%q, tenantID=%q",
+			actor.ID, tenantID)
+
+		// Look up tenant (with caching)
+		tenant, err := findTenantByID(c, repo, tenantID)
+		if err != nil {
+			return // Error already handled by findTenantByID
+		}
+
+		utils.Debug("[AuthenticatedTenantContext] Successfully resolved tenant: ID=%q, Name=%q, Domain=%q",
+			tenant.ID, tenant.Name, tenantDomainValue(tenant))
+
+		c.Set(CtxTenantIDKey, tenant.ID)
+		c.Set(CtxTenantKey, tenant)
+		c.Next()
+	}
+}
+
 func TenantContext(repo repositories.TenantRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		env := strings.ToLower(strings.TrimSpace(os.Getenv("ENV")))
@@ -58,7 +113,7 @@ func TenantContext(repo repositories.TenantRepository) gin.HandlerFunc {
 		var err error
 		var resolvedTenantID string
 
-		if tenantIDHeader != "" || tsHeader != "" || sigHeader != "" {
+		if tenantIDHeader != "" && tsHeader != "" && sigHeader != "" {
 			utils.Debug("[TenantContext] Using signed tenant context")
 			tenant, err = handleSignedTenantContext(c, repo, tenantIDHeader, domainHeader, tsHeader, sigHeader)
 			if err != nil {
@@ -68,7 +123,7 @@ func TenantContext(repo repositories.TenantRepository) gin.HandlerFunc {
 			resolvedTenantID = tenant.ID
 		} else {
 			utils.Debug("[TenantContext] Using unsigned tenant context")
-			tenant, err = handleUnsignedTenantContext(c, repo, env, domainHeader)
+			tenant, err = handleUnsignedTenantContext(c, repo, env, tenantIDHeader, domainHeader)
 			if err != nil {
 				utils.Debug("[TenantContext] Unsigned context failed: %v", err)
 				return
@@ -135,15 +190,26 @@ func handleSignedTenantContext(c *gin.Context, repo repositories.TenantRepositor
 	return tenant, nil
 }
 
-func handleUnsignedTenantContext(c *gin.Context, repo repositories.TenantRepository, env, headerDomain string) (*models.Tenant, error) {
-	utils.Debug("[UnsignedContext] Resolving tenant from domain: env=%s, headerDomain=%s", env, headerDomain)
+func handleUnsignedTenantContext(c *gin.Context, repo repositories.TenantRepository, env, tenantID, headerDomain string) (*models.Tenant, error) {
+	utils.Debug("[UnsignedContext] Resolving tenant: env=%s, tenantID=%s, headerDomain=%s", env, tenantID, headerDomain)
 
+	// If tenant ID is provided, use it directly
+	if tenantID != "" {
+		utils.Debug("[UnsignedContext] Using tenant ID from header: %s", tenantID)
+		tenant, err := findTenantByID(c, repo, tenantID)
+		if err != nil {
+			return nil, errAborted
+		}
+		utils.Debug("[UnsignedContext] Successfully resolved tenant by ID: %s", tenantID)
+		return tenant, nil
+	}
+
+	// Otherwise, fall back to domain-based resolution
 	domain := ""
 	if headerDomain != "" && env == "local" {
 		utils.Debug("[UnsignedContext] Using header domain in local env: %s", headerDomain)
 		domain = headerDomain
 	}
-	// print domain
 	utils.Debug("[UnsignedContext] Resolved domain: %s", domain)
 	if domain == "" {
 		host := c.Request.Host
