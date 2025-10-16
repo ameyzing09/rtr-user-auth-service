@@ -77,7 +77,7 @@ func AuthenticatedTenantContext(repo repositories.TenantRepository) gin.HandlerF
 			return
 		}
 
-		utils.Debug("[AuthenticatedTenantContext] Resolving tenant for authenticated user: userID=%s, tenantID=%s",
+		utils.Debug("[AuthenticatedTenantContext] Resolving tenant for authenticated user: userID=%q, tenantID=%q",
 			actor.ID, tenantID)
 
 		// Look up tenant (with caching)
