@@ -26,9 +26,11 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 		tenantScope.GET("/settings", tenantSettingHandler.Get)
 	}
 
-	// Protected tenant routes (with tenant context, auth, and CSRF protection)
+	// Protected tenant routes (with auth first, then authenticated tenant context, and CSRF protection)
+	// AuthenticatedTenantContext derives tenant from the authenticated user's JWT token
+	// This eliminates the need for client-side tenant secrets
 	protectedRoute := r.Group("/")
-	protectedRoute.Use(middleware.TenantContext(tenantRepo), middleware.AuthMiddleware(), middleware.CSRFProtection())
+	protectedRoute.Use(middleware.AuthMiddleware(), middleware.AuthenticatedTenantContext(tenantRepo), middleware.CSRFProtection())
 	{
 		// Profile routes - all authenticated users can access their own profile
 		protectedRoute.GET("/me", userHandler.GetMe)

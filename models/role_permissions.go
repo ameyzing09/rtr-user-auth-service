@@ -43,32 +43,54 @@ var RolePermissions = map[Role][]string{
 		string(PermSettingsAll),
 		string(PermBillingAll),
 		string(PermIntegrationsAll),
+		string(PermFeedbackAll),
+
+		// Explicit list permissions for granular control
+		string(PermJobList),
+		string(PermApplicationList),
+		string(PermPipelineList),
+		string(PermMemberList),
+		string(PermInterviewList),
 	},
 
-	// HR: Job posting, applications, pipeline, and team member management
+	// HR: Job posting, applications, pipeline, team member, and interview management
 	RoleHR: {
 		string(PermJobAll),
 		string(PermApplicationAll),
 		string(PermPipelineAll),
 		string(PermMemberAll),
+		string(PermInterviewAll), // HR schedules and manages interviews
+		string(PermFeedbackAll),  // HR can manage interview feedback
+
+		// Explicit list permissions
+		string(PermJobList),
+		string(PermApplicationList),
+		string(PermPipelineList),
+		string(PermMemberList),
+		string(PermInterviewList),
 	},
 
 	// INTERVIEWER: Can manage interviews and view applications
 	RoleInterviewer: {
 		string(PermInterviewAll),
+		string(PermFeedbackAll), // Interviewers provide feedback
 		string(PermApplicationRead),
+
+		// List permissions for interviews and applications
+		string(PermInterviewList),
+		string(PermApplicationList),
 	},
 
-	// VIEWER: Read-only access to analytics and applications
-	RoleViewer: {
+	// VIEWER: Deprecated role - no permissions
+	RoleViewer: {},
+
+	// CANDIDATE: Read-only access to analytics and applications
+	// Row-level security ensures candidates only see their own data
+	RoleCandidate: {
 		string(PermAnalyticsRead),
 		string(PermApplicationRead),
+		string(PermApplicationList),
 	},
-
-	// CANDIDATE: Minimal permissions (can be extended as needed)
-	// Typically candidates only see their own data, which is handled
-	// by row-level security/scoping in services, not permissions
-	RoleCandidate: {},
 }
 
 // GetRolePermissions returns the permissions for a given role

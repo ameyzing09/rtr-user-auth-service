@@ -8,6 +8,7 @@ import (
 	"rtr-user-auth-service/config"
 	"rtr-user-auth-service/domain"
 	errcodes "rtr-user-auth-service/errors"
+	"rtr-user-auth-service/middleware"
 	"rtr-user-auth-service/models"
 	"rtr-user-auth-service/services"
 	"rtr-user-auth-service/utils"
@@ -17,11 +18,15 @@ import (
 )
 
 type UserHandler struct {
-	authService services.AuthService
+	authService          services.AuthService
+	tenantSettingService services.TenantSettingService
 }
 
-func NewUserHandler(authService services.AuthService) *UserHandler {
-	return &UserHandler{authService: authService}
+func NewUserHandler(authService services.AuthService, tenantSettingService services.TenantSettingService) *UserHandler {
+	return &UserHandler{
+		authService:          authService,
+		tenantSettingService: tenantSettingService,
+	}
 }
 
 func (h *UserHandler) Login(c *gin.Context) {
@@ -40,15 +45,44 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Audit: Successful login
+	if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+		clientIP := middleware.GetClientIP(c)
+		userAgent := middleware.GetUserAgent(c)
+		actorRoleStr := string(user.Role)
+		_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+			Action:        utils.AuditActionLoginSuccess,
+			ActorID:       &user.ID,
+			ActorTenantID: &user.TenantID,
+			ActorRole:     &actorRoleStr,
+			Status:        models.AuditStatusSuccess,
+			IPAddress:     utils.StringPtr(clientIP),
+			UserAgent:     utils.StringPtr(userAgent),
+			Metadata: map[string]interface{}{
+				"email": user.Email,
+			},
+		})
+	}
+
 	c.Header("X-Tenant-ID", user.TenantID)
 
 	// Set httpOnly cookie for JWT token
 	setCookies(c, token.Token)
 
+	// Fetch tenant branding if user is not a SuperAdmin
+	var tenantBranding *TenantBranding
+	if user.Role != models.RoleSuperAdmin && user.TenantID != "" {
+		branding := h.resolveTenantBranding(c, user.TenantID)
+		if branding != nil {
+			tenantBranding = branding
+		}
+	}
+
 	response := LoginResponse{
-		Token:     token.Token,
-		ExpiresAt: token.ExpiresAt,
-		User:      user,
+		Token:          token.Token,
+		ExpiresAt:      token.ExpiresAt,
+		User:           user,
+		TenantBranding: tenantBranding,
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -76,6 +110,26 @@ func (h *UserHandler) AdminLogin(c *gin.Context) {
 			"message": domain.ErrSuperadminRequired.Error(),
 		})
 		return
+	}
+
+	// Audit: Successful admin login
+	if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+		clientIP := middleware.GetClientIP(c)
+		userAgent := middleware.GetUserAgent(c)
+		actorRoleStr := string(user.Role)
+		_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+			Action:        utils.AuditActionLoginSuccess,
+			ActorID:       &user.ID,
+			ActorTenantID: &user.TenantID,
+			ActorRole:     &actorRoleStr,
+			Status:        models.AuditStatusSuccess,
+			IPAddress:     utils.StringPtr(clientIP),
+			UserAgent:     utils.StringPtr(userAgent),
+			Metadata: map[string]interface{}{
+				"email":      user.Email,
+				"admin_login": true,
+			},
+		})
 	}
 
 	branding := resolvePlatformBranding(config.Get())
@@ -155,6 +209,22 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	// Audit: Password change
+	if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+		clientIP := middleware.GetClientIP(c)
+		userAgent := middleware.GetUserAgent(c)
+		actorRoleStr := string(actor.Role)
+		_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+			Action:        utils.AuditActionPasswordChange,
+			ActorID:       &actor.ID,
+			ActorTenantID: &actor.TenantID,
+			ActorRole:     &actorRoleStr,
+			Status:        models.AuditStatusSuccess,
+			IPAddress:     utils.StringPtr(clientIP),
+			UserAgent:     utils.StringPtr(userAgent),
+		})
+	}
+
 	dropClientCache(c)
 	c.Status(http.StatusNoContent)
 }
@@ -186,10 +256,63 @@ func (h *UserHandler) SuperadminChangePassword(c *gin.Context) {
 }
 
 func (h *UserHandler) Logout(c *gin.Context) {
+	// Audit: Logout
+	if actorValue, exists := c.Get("actor"); exists {
+		if actor, ok := actorValue.(services.UserRead); ok {
+			if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+				clientIP := middleware.GetClientIP(c)
+				userAgent := middleware.GetUserAgent(c)
+				actorRoleStr := string(actor.Role)
+				_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+					Action:        utils.AuditActionLogout,
+					ActorID:       &actor.ID,
+					ActorTenantID: &actor.TenantID,
+					ActorRole:     &actorRoleStr,
+					Status:        models.AuditStatusSuccess,
+					IPAddress:     utils.StringPtr(clientIP),
+					UserAgent:     utils.StringPtr(userAgent),
+				})
+			}
+		}
+	}
+
 	// Clear cookies
 	clearCookies(c)
 	dropClientCache(c)
 	c.Status(http.StatusNoContent)
+}
+
+func (h *UserHandler) resolveTenantBranding(c *gin.Context, tenantID string) *TenantBranding {
+	// Fetch tenant settings
+	cfg, err := h.tenantSettingService.GetConfiguration(c.Request.Context(), tenantID)
+	if err != nil {
+		utils.Debug("[resolveTenantBranding] Failed to fetch tenant settings for %s: %v", tenantID, err)
+		return nil
+	}
+
+	// Extract branding from config
+	brandingData, ok := cfg["branding"]
+	if !ok {
+		utils.Debug("[resolveTenantBranding] No branding found in tenant settings for %s", tenantID)
+		return nil
+	}
+
+	// Convert to map[string]interface{}
+	brandingMap, ok := brandingData.(map[string]interface{})
+	if !ok {
+		utils.Debug("[resolveTenantBranding] Invalid branding format in tenant settings for %s", tenantID)
+		return nil
+	}
+
+	branding := &TenantBranding{
+		Name:         getStringValue(brandingMap, "name", ""),
+		LogoURL:      getStringValue(brandingMap, "logo_url", ""),
+		PrimaryColor: getStringValue(brandingMap, "primary_color", "#1F64F0"),
+		AccentColor:  getStringValue(brandingMap, "accent_color", "#0D2F81"),
+		NavbarTitle:  getStringValue(brandingMap, "navbar_title", ""),
+	}
+
+	return branding
 }
 
 func resolvePlatformBranding(cfg *config.Config) PlatformBranding {
@@ -214,6 +337,15 @@ func resolvePlatformBranding(cfg *config.Config) PlatformBranding {
 	}
 
 	return branding
+}
+
+func getStringValue(m map[string]interface{}, key, defaultValue string) string {
+	if val, ok := m[key]; ok {
+		if strVal, ok := val.(string); ok {
+			return strVal
+		}
+	}
+	return defaultValue
 }
 
 func valueOrDefault(value, defaultValue string) string {
