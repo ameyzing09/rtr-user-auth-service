@@ -56,14 +56,7 @@ func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, U
 	if err != nil {
 		return AuthToken{}, UserRead{}, err
 	}
-	return AuthToken{Token: token, ExpiresAt: exp}, UserRead{
-		ID:          user.ID,
-		TenantID:    user.TenantID,
-		Name:        user.Name,
-		Email:       user.Email,
-		Role:        user.Role,
-		Permissions: permissions,
-	}, nil
+	return AuthToken{Token: token, ExpiresAt: exp}, toRead(user), nil
 }
 
 func (s *authService) GetMe(ctx context.Context, userID, tenantID string) (UserRead, error) {
@@ -72,16 +65,7 @@ func (s *authService) GetMe(ctx context.Context, userID, tenantID string) (UserR
 		return UserRead{}, err
 	}
 
-	permissions := models.GetRolePermissions(user.Role)
-
-	return UserRead{
-		ID:          user.ID,
-		TenantID:    user.TenantID,
-		Name:        user.Name,
-		Email:       user.Email,
-		Role:        user.Role,
-		Permissions: permissions,
-	}, nil
+	return toRead(user), nil
 }
 
 func (s *authService) ListUsers(ctx context.Context, tenantID string) ([]UserRead, error) {
@@ -91,15 +75,7 @@ func (s *authService) ListUsers(ctx context.Context, tenantID string) ([]UserRea
 	}
 	output := make([]UserRead, 0, len(list))
 	for _, user := range list {
-		permissions := models.GetRolePermissions(user.Role)
-		output = append(output, UserRead{
-			ID:          user.ID,
-			TenantID:    user.TenantID,
-			Name:        user.Name,
-			Email:       user.Email,
-			Role:        user.Role,
-			Permissions: permissions,
-		})
+		output = append(output, toRead(&user))
 	}
 	return output, nil
 }
@@ -158,7 +134,7 @@ func (s *authService) ChangePassword(ctx context.Context, tenantID string, actor
 		return err
 	}
 
-	return s.users.UpdatePassword(ctx, tenantID, actor.ID, hashedPassword, true)
+	return s.users.UpdatePassword(ctx, tenantID, actor.ID, hashedPassword, utils.BoolPtr(false))
 }
 
 func (s *authService) SuperadminChangePassword(ctx context.Context, actor UserRead, input SuperadminChangePasswordInput) (string, error) {
@@ -191,17 +167,118 @@ func (s *authService) SuperadminChangePassword(ctx context.Context, actor UserRe
 	}
 
 	// Update password and clear the force_password_reset flag
-	if err := s.users.UpdatePassword(ctx, input.TenantID, input.UserID, hashedPassword, true); err != nil {
+	if err := s.users.UpdatePassword(ctx, input.TenantID, input.UserID, hashedPassword, utils.BoolPtr(false)); err != nil {
 		return "", err
 	}
 
 	return tempPassword, nil
 }
 
+
+// AdminListUsers lists all users, optionally filtered by tenant, role, and search term
+// Used by superadmins to manage users across the platform
+func (s *authService) AdminListUsers(ctx context.Context, tenantID *string, role *string, search *string, page, limit int) ([]UserRead, int, error) {
+	// For now, we'll fetch all users if no tenant_id is provided, or users from a specific tenant
+	var users []models.User
+	var total int64
+
+	query := s.db.WithContext(ctx)
+
+	// Apply tenant filter if provided
+	if tenantID != nil && *tenantID != "" {
+		query = query.Where("tenant_id = ?", *tenantID)
+	}
+
+	// Apply role filter if provided
+	if role != nil && *role != "" {
+		query = query.Where("role = ?", *role)
+	}
+
+	// Apply search filter if provided (search by name or email)
+	if search != nil && *search != "" {
+		searchTerm := "%" + *search + "%"
+		query = query.Where("name ILIKE ? OR email ILIKE ?", searchTerm, searchTerm)
+	}
+
+	// Get total count
+	if err := query.Model(&models.User{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Fetch paginated results
+	offset := (page - 1) * limit
+	if err := query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Convert to UserRead
+	result := make([]UserRead, 0, len(users))
+	for _, user := range users {
+		result = append(result, toRead(&user))
+	}
+
+	return result, int(total), nil
+}
+
+// AdminGetUser gets a specific user by ID (across all tenants)
+// Used by superadmins to view user details
+func (s *authService) AdminGetUser(ctx context.Context, userID string) (UserRead, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return UserRead{}, domain.ErrUserNotFound
+		}
+		return UserRead{}, err
+	}
+
+	return toRead(&user), nil
+}
+
+// AdminResetPassword resets a user's password and optionally forces them to change it on next login
+// If newPassword is nil, a temporary password is generated
+// If forceChange is true, the user's must_change_password flag is set to true
+func (s *authService) AdminResetPassword(ctx context.Context, userID string, newPassword *string, forceChange bool) (string, error) {
+	// Get the user
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return "", domain.ErrUserNotFound
+		}
+		return "", err
+	}
+
+	// Determine the password to use
+	var passwordToHash string
+	if newPassword != nil && *newPassword != "" {
+		passwordToHash = *newPassword
+	} else {
+		// Generate a temporary password
+		var err error
+		passwordToHash, err = utils.GenerateTempPassword()
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// Hash the password
+	hashedPassword, err := utils.HashPassword(passwordToHash)
+	if err != nil {
+		return "", err
+	}
+
+	// Update password - set force_password_reset based on forceChange parameter
+	// If forceChange is true, set ForcePasswordReset to true; if false, set to false
+	if err := s.users.UpdatePassword(ctx, user.TenantID, userID, hashedPassword, utils.BoolPtr(forceChange)); err != nil {
+		return "", err
+	}
+
+	return passwordToHash, nil
+}
 func toRead(u *models.User) UserRead {
 	permissions := models.GetRolePermissions(u.Role)
 	return UserRead{
 		ID: u.ID, TenantID: u.TenantID, Name: u.Name, Email: u.Email,
-		Role: u.Role, Permissions: permissions, MustChangePassword: u.ForcePasswordReset,
+		Role: u.Role, Permissions: permissions, ForcePasswordReset: u.ForcePasswordReset,
+		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, LastLogin: nil,
 	}
 }

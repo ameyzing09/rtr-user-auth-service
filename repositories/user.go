@@ -13,7 +13,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*models.User, error)
 	FindByID(ctx context.Context, tenantID, userID string) (*models.User, error)
 	ListByTenant(ctx context.Context, tenantID string) ([]models.User, error)
-	UpdatePassword(ctx context.Context, tenantID, userID, hashedPassword string, clearForce bool) error
+	UpdatePassword(ctx context.Context, tenantID, userID, hashedPassword string, forcePasswordReset *bool) error
 }
 
 type GormUserRepo struct {
@@ -72,16 +72,19 @@ func (r *GormUserRepo) ListByTenant(ctx context.Context, tenantID string) ([]mod
 	return users, nil
 }
 
-func (r *GormUserRepo) UpdatePassword(ctx context.Context, tenantID, userID, newHashedPassword string, clearForce bool) error {
+func (r *GormUserRepo) UpdatePassword(ctx context.Context, tenantID, userID, newHashedPassword string, forcePasswordReset *bool) error {
 	q := r.db.WithContext(ctx).
 		Model(&models.User{}).
 		Where("id = ? AND tenant_id = ?", userID, tenantID)
 
-	if clearForce {
-		return q.Updates(map[string]interface{}{
-			"password":             newHashedPassword,
-			"force_password_reset": false,
-		}).Error
+	// If forcePasswordReset is nil, only update password
+	if forcePasswordReset == nil {
+		return q.Update("password", newHashedPassword).Error
 	}
-	return q.Update("password", newHashedPassword).Error
+
+	// If forcePasswordReset is provided, update both password and flag
+	return q.Updates(map[string]interface{}{
+		"password":             newHashedPassword,
+		"force_password_reset": *forcePasswordReset,
+	}).Error
 }

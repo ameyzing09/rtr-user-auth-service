@@ -164,3 +164,44 @@ type SubscriptionActivateRequest struct {
 	BillingCycle string `json:"billing_cycle" binding:"required,oneof=MONTHLY ANNUAL"`
 	AmountCents  uint32 `json:"amount_cents,omitempty"`
 }
+
+// Admin User Management DTOs
+
+type AdminListUsersResponse struct {
+	Users []AdminUserDetail `json:"users"`
+	Total int               `json:"total"`
+	Page  int               `json:"page,omitempty"`
+	Limit int               `json:"limit,omitempty"`
+}
+
+type AdminUserDetail struct {
+	ID                 string    `json:"id"`
+	TenantID           string    `json:"tenant_id"`
+	Name               string    `json:"name"`
+	Email              string    `json:"email"`
+	Role               string    `json:"role"`
+	ForcePasswordReset bool      `json:"force_password_reset"`
+	CreatedAt          string    `json:"created_at"`
+	UpdatedAt          string    `json:"updated_at"`
+	LastLogin          *string   `json:"last_login,omitempty"`
+}
+
+type AdminResetPasswordRequest struct {
+	NewPassword  *string `json:"new_password,omitempty" binding:"omitempty,min=6"`
+	ForceChange  bool    `json:"force_change" binding:"required"`
+}
+
+type AdminResetPasswordResponse struct {
+	UserID             string `json:"user_id"`
+	TemporaryPassword  string `json:"temporary_password"`
+	ForcePasswordReset bool   `json:"force_password_reset"`
+	Message            string `json:"message,omitempty"`
+}
+
+type AdminListUsersRequest struct {
+	TenantID *string `form:"tenant_id" binding:"omitempty,uuid"`
+	Role     *string `form:"role" binding:"omitempty,oneof=admin hr interviewer candidate superadmin"`
+	Search   *string `form:"search" binding:"omitempty,max=255"`
+	Page     int     `form:"page" binding:"omitempty,min=1"`
+	Limit    int     `form:"limit" binding:"omitempty,min=1,max=100"`
+}

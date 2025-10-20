@@ -12,6 +12,7 @@ import (
 	"rtr-user-auth-service/models"
 	"rtr-user-auth-service/services"
 	"rtr-user-auth-service/utils"
+	"errors"
 	"rtr-user-auth-service/utils/httpx"
 
 	"github.com/gin-gonic/gin"
@@ -282,6 +283,187 @@ func (h *UserHandler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// AdminListUsers lists all users across all tenants or within a specific tenant
+// Requires superadmin role and SYS_USER_LIST permission
+func (h *UserHandler) AdminListUsers(c *gin.Context) {
+	var req AdminListUsersRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httpx.HandleBindingError(c, err)
+		return
+	}
+
+	// Set defaults
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 50
+	}
+
+	// Get all users (this will be implemented in the service)
+	users, total, err := h.authService.AdminListUsers(c.Request.Context(), req.TenantID, req.Role, req.Search, req.Page, req.Limit)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	// Transform to response DTOs
+	response := AdminListUsersResponse{
+		Users: make([]AdminUserDetail, 0, len(users)),
+		Total: total,
+		Page:  req.Page,
+		Limit: req.Limit,
+	}
+
+	for _, user := range users {
+		response.Users = append(response.Users, AdminUserDetail{
+			ID:                 user.ID,
+			TenantID:           user.TenantID,
+			Name:               user.Name,
+			Email:              user.Email,
+			Role:               string(user.Role),
+			ForcePasswordReset: user.ForcePasswordReset,
+			CreatedAt:          user.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:          user.UpdatedAt.Format(time.RFC3339),
+			LastLogin:          nil,
+		})
+	}
+
+	// Audit log
+	if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+		actor := c.MustGet("actor").(services.UserRead)
+		clientIP := middleware.GetClientIP(c)
+		userAgent := middleware.GetUserAgent(c)
+		actorRoleStr := string(actor.Role)
+		_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+			Action:    utils.AuditActionUserList,
+			ActorID:   &actor.ID,
+			ActorTenantID: &actor.TenantID,
+			ActorRole: &actorRoleStr,
+			Status:    models.AuditStatusSuccess,
+			IPAddress: utils.StringPtr(clientIP),
+			UserAgent: utils.StringPtr(userAgent),
+			Metadata: map[string]interface{}{
+				"resource": "users",
+				"tenant_id": req.TenantID,
+				"count": len(users),
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// AdminGetUser gets a specific user by ID
+// Requires superadmin role and SYS_USER_LIST permission
+func (h *UserHandler) AdminGetUser(c *gin.Context) {
+	userID := c.Param("userId")
+	if userID == "" {
+		httpx.HandleError(c, errors.New("user_id is required"))
+		return
+	}
+
+	user, err := h.authService.AdminGetUser(c.Request.Context(), userID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	response := AdminUserDetail{
+		ID:                 user.ID,
+		TenantID:           user.TenantID,
+		Name:               user.Name,
+		Email:              user.Email,
+		Role:               string(user.Role),
+		ForcePasswordReset: user.ForcePasswordReset,
+		CreatedAt:          user.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          user.UpdatedAt.Format(time.RFC3339),
+		LastLogin:          nil,
+	}
+
+	// Audit log
+	if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+		actor := c.MustGet("actor").(services.UserRead)
+		clientIP := middleware.GetClientIP(c)
+		userAgent := middleware.GetUserAgent(c)
+		actorRoleStr := string(actor.Role)
+		resourceType := "user"
+		_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+			Action:             utils.AuditActionUserRead,
+			ActorID:            &actor.ID,
+			ActorTenantID:      &actor.TenantID,
+			ActorRole:          &actorRoleStr,
+			TargetResourceID:   &userID,
+			TargetResourceType: &resourceType,
+			Status:             models.AuditStatusSuccess,
+			IPAddress:          utils.StringPtr(clientIP),
+			UserAgent:          utils.StringPtr(userAgent),
+			Metadata: map[string]interface{}{
+				"resource": "user",
+				"target_email": user.Email,
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// AdminResetUserPassword resets a user's password and optionally forces password change
+// Requires superadmin role and PLATFORM_USERS_MANAGE permission
+func (h *UserHandler) AdminResetUserPassword(c *gin.Context) {
+	userID := c.Param("userId")
+	if userID == "" {
+		httpx.HandleError(c, errors.New("user_id is required"))
+		return
+	}
+
+	var req AdminResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.HandleBindingError(c, err)
+		return
+	}
+
+	// Reset password via service
+	tempPassword, err := h.authService.AdminResetPassword(c.Request.Context(), userID, req.NewPassword, req.ForceChange)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	// Audit log
+	if auditSvc := middleware.GetAuditService(c); auditSvc != nil {
+		actor := c.MustGet("actor").(services.UserRead)
+		clientIP := middleware.GetClientIP(c)
+		userAgent := middleware.GetUserAgent(c)
+		actorRoleStr := string(actor.Role)
+		resourceType := "user_password"
+		_ = auditSvc.Log(c.Request.Context(), services.AuditLogEntry{
+			Action:             utils.AuditActionUserPasswordReset,
+			ActorID:            &actor.ID,
+			ActorTenantID:      &actor.TenantID,
+			ActorRole:          &actorRoleStr,
+			TargetResourceID:   &userID,
+			TargetResourceType: &resourceType,
+			Status:             models.AuditStatusSuccess,
+			IPAddress:          utils.StringPtr(clientIP),
+			UserAgent:          utils.StringPtr(userAgent),
+			Metadata: map[string]interface{}{
+				"resource": "user_password",
+				"force_change": req.ForceChange,
+				"temp_password_generated": req.NewPassword == nil,
+			},
+		})
+	}
+
+	response := AdminResetPasswordResponse{
+		UserID:             userID,
+		TemporaryPassword:  tempPassword,
+		ForcePasswordReset: req.ForceChange,
+		Message:            "Password has been reset successfully",
+	}
+
+	c.JSON(http.StatusOK, response)
+}
 func (h *UserHandler) resolveTenantBranding(c *gin.Context, tenantID string) *TenantBranding {
 	// Fetch tenant settings
 	cfg, err := h.tenantSettingService.GetConfiguration(c.Request.Context(), tenantID)

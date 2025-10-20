@@ -24,9 +24,11 @@ const (
 
 	// User actions
 	AuditActionUserCreate        = "user.create"
+	AuditActionUserRead          = "user.read"
 	AuditActionUserUpdate        = "user.update"
 	AuditActionUserDelete        = "user.delete"
 	AuditActionUserList          = "user.list"
+	AuditActionUserPasswordReset = "user.password_reset"
 
 	// Subscription actions
 	AuditActionSubscriptionCreate  = "subscription.create"
@@ -81,4 +83,9 @@ func StringPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// BoolPtr converts a bool to a pointer
+func BoolPtr(b bool) *bool {
+	return &b
 }
