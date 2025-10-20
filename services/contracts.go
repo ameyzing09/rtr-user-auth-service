@@ -18,7 +18,10 @@ type UserRead struct {
 	Email              string
 	Role               models.Role
 	Permissions        []string
-	MustChangePassword bool
+	ForcePasswordReset bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	LastLogin          *time.Time
 }
 
 type LoginInput struct {
@@ -55,15 +58,18 @@ type AuthService interface {
 	CreateUser(ctx context.Context, tenantID string, actor UserRead, input CreateUserInput) (UserRead, string, error)
 	ChangePassword(ctx context.Context, tenantID string, actor UserRead, input ChangePasswordInput) error
 	SuperadminChangePassword(ctx context.Context, actor UserRead, input SuperadminChangePasswordInput) (string, error)
+	// Admin user management (superadmin only)
+	AdminListUsers(ctx context.Context, tenantID *string, role *string, search *string, page, limit int) ([]UserRead, int, error)
+	AdminGetUser(ctx context.Context, userID string) (UserRead, error)
+	AdminResetPassword(ctx context.Context, userID string, newPassword *string, forceChange bool) (string, error)
 }
-
 type UserRepository interface {
 	EmailExists(ctx context.Context, tenantID, email string) (bool, error)
 	Create(ctx context.Context, u *models.User) error
 	FindByEmail(ctx context.Context, email string) (*models.User, error)
 	FindByID(ctx context.Context, tenantID, userID string) (*models.User, error)
 	ListByTenant(ctx context.Context, tenantID string) ([]models.User, error)
-	UpdatePassword(ctx context.Context, tenantID, userID, hashedPassword string, clearForce bool) error
+	UpdatePassword(ctx context.Context, tenantID, userID, hashedPassword string, forcePasswordReset *bool) error
 }
 
 type TenantRepository interface {

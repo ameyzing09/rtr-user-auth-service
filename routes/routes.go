@@ -71,7 +71,12 @@ func RegisterRoutes(r *gin.Engine, userHandler *handlers.UserHandler, tenantSett
 		admin.POST("/admin/tenant/:id/subscription/suspend", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Suspend)
 		admin.POST("/admin/tenant/:id/subscription/resume", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Resume)
 		admin.POST("/admin/tenant/:id/subscription/cancel", middleware.RequirePermission(string(models.PermTenantUpdate)), subscriptionAdminHandler.Cancel)
+
+		// User management - superadmin only
+		admin.GET("/admin/users", middleware.RequirePermission(string(models.PermSysUserList)), userHandler.AdminListUsers)
+		admin.GET("/admin/users/:userId", middleware.RequirePermission(string(models.PermSysUserList)), userHandler.AdminGetUser)
+		admin.POST("/admin/users/:userId/reset-password", middleware.RequirePermission(string(models.PermSysUserList)), userHandler.AdminResetUserPassword)
+
 		admin.POST("/admin/change-password", middleware.RequirePermission(string(models.PermTenantUpdate)), userHandler.SuperadminChangePassword)
 	}
 }
- 
