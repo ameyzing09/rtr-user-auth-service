@@ -27,10 +27,27 @@ func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository, s Subscri
 
 func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, UserRead, error) {
 	email := strings.ToLower(strings.TrimSpace(input.Email))
-	user, err := s.users.FindByEmail(ctx, email)
-	if err != nil {
-		return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
+	tenantID := strings.TrimSpace(input.TenantID)
+
+	var user *models.User
+	var err error
+
+	// Handle SuperAdmin login (without tenant context) vs regular tenant user login
+	if tenantID == "" {
+		// No tenant context - only allow for SuperAdmin login
+		// Query across all tenants, but verify user is SuperAdmin after retrieval
+		user, err = s.findSuperAdminByEmail(ctx, email)
+		if err != nil {
+			return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
+		}
+	} else {
+		// Tenant context provided - enforce tenant isolation for regular users
+		user, err = s.users.FindByEmail(ctx, tenantID, email)
+		if err != nil {
+			return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
+		}
 	}
+
 	if !utils.CheckPassword(user.Password, input.Password) {
 		return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
 	}
@@ -274,6 +291,21 @@ func (s *authService) AdminResetPassword(ctx context.Context, userID string, new
 
 	return passwordToHash, nil
 }
+
+// findSuperAdminByEmail searches for a user by email across all tenants
+// and returns the user ONLY if they have the SuperAdmin role.
+// This is used for admin login where no tenant context is available.
+func (s *authService) findSuperAdminByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	err := s.db.WithContext(ctx).
+		Where("email = ? AND role = ?", email, models.RoleSuperAdmin).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func toRead(u *models.User) UserRead {
 	permissions := models.GetRolePermissions(u.Role)
 	return UserRead{
