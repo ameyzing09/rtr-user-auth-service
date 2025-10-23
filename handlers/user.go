@@ -37,9 +37,13 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Extract tenant ID from context (set by TenantContext middleware)
+	tenantID := middleware.GetTenantIDFromContext(c)
+
 	token, user, err := h.authService.Login(c, services.LoginInput{
 		Email:    loginReq.Email,
 		Password: loginReq.Password,
+		TenantID: tenantID,
 	})
 	if err != nil {
 		httpx.HandleError(c, err)
@@ -96,9 +100,12 @@ func (h *UserHandler) AdminLogin(c *gin.Context) {
 		return
 	}
 
+	// AdminLogin has no tenant context - TenantID will be empty
+	// The Login service will handle SuperAdmin authentication without tenant isolation
 	token, user, err := h.authService.Login(c, services.LoginInput{
 		Email:    loginReq.Email,
 		Password: loginReq.Password,
+		TenantID: "", // No tenant context for admin login
 	})
 	if err != nil {
 		httpx.HandleError(c, err)

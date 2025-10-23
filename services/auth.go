@@ -27,10 +27,27 @@ func NewAuthService(db *gorm.DB, u UserRepository, t TenantRepository, s Subscri
 
 func (s *authService) Login(ctx context.Context, input LoginInput) (AuthToken, UserRead, error) {
 	email := strings.ToLower(strings.TrimSpace(input.Email))
-	user, err := s.users.FindByEmail(ctx, email)
-	if err != nil {
-		return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
+	tenantID := strings.TrimSpace(input.TenantID)
+
+	var user *models.User
+	var err error
+
+	// Handle SuperAdmin login (without tenant context) vs regular tenant user login
+	if tenantID == "" {
+		// No tenant context - only allow for SuperAdmin login
+		// Query across all tenants, but verify user is SuperAdmin after retrieval
+		user, err = s.findSuperAdminByEmail(ctx, email)
+		if err != nil {
+			return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
+		}
+	} else {
+		// Tenant context provided - enforce tenant isolation for regular users
+		user, err = s.users.FindByEmail(ctx, tenantID, email)
+		if err != nil {
+			return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
+		}
 	}
+
 	if !utils.CheckPassword(user.Password, input.Password) {
 		return AuthToken{}, UserRead{}, domain.ErrInvalidCredentials
 	}
@@ -177,12 +194,14 @@ func (s *authService) SuperadminChangePassword(ctx context.Context, actor UserRe
 
 // AdminListUsers lists all users, optionally filtered by tenant, role, and search term
 // Used by superadmins to manage users across the platform
+// Note: Only returns active users. Soft-deleted users are automatically filtered by GORM.
+// To view inactive users, they would need to be explicitly included via a separate endpoint.
 func (s *authService) AdminListUsers(ctx context.Context, tenantID *string, role *string, search *string, page, limit int) ([]UserRead, int, error) {
 	// For now, we'll fetch all users if no tenant_id is provided, or users from a specific tenant
 	var users []models.User
 	var total int64
 
-	query := s.db.WithContext(ctx)
+	query := s.db.WithContext(ctx).Where("is_active = ?", true)
 
 	// Apply tenant filter if provided
 	if tenantID != nil && *tenantID != "" {
@@ -222,9 +241,10 @@ func (s *authService) AdminListUsers(ctx context.Context, tenantID *string, role
 
 // AdminGetUser gets a specific user by ID (across all tenants)
 // Used by superadmins to view user details
+// Note: Only returns active users. Soft-deleted users are automatically filtered by GORM.
 func (s *authService) AdminGetUser(ctx context.Context, userID string) (UserRead, error) {
 	var user models.User
-	if err := s.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ? AND is_active = ?", userID, true).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return UserRead{}, domain.ErrUserNotFound
 		}
@@ -274,6 +294,22 @@ func (s *authService) AdminResetPassword(ctx context.Context, userID string, new
 
 	return passwordToHash, nil
 }
+
+// findSuperAdminByEmail searches for a user by email across all tenants
+// and returns the user ONLY if they have the SuperAdmin role and are active.
+// This is used for admin login where no tenant context is available.
+// Security: Filters out inactive and soft-deleted users to prevent authentication with disabled accounts.
+func (s *authService) findSuperAdminByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	err := s.db.WithContext(ctx).
+		Where("email = ? AND role = ? AND is_active = ?", email, models.RoleSuperAdmin, true).
+		First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func toRead(u *models.User) UserRead {
 	permissions := models.GetRolePermissions(u.Role)
 	return UserRead{

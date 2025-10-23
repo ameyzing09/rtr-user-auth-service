@@ -27,6 +27,7 @@ type UserRead struct {
 type LoginInput struct {
 	Email    string
 	Password string
+	TenantID string
 }
 
 type CreateUserInput struct {
@@ -66,7 +67,7 @@ type AuthService interface {
 type UserRepository interface {
 	EmailExists(ctx context.Context, tenantID, email string) (bool, error)
 	Create(ctx context.Context, u *models.User) error
-	FindByEmail(ctx context.Context, email string) (*models.User, error)
+	FindByEmail(ctx context.Context, tenantID, email string) (*models.User, error)
 	FindByID(ctx context.Context, tenantID, userID string) (*models.User, error)
 	ListByTenant(ctx context.Context, tenantID string) ([]models.User, error)
 	UpdatePassword(ctx context.Context, tenantID, userID, hashedPassword string, forcePasswordReset *bool) error
