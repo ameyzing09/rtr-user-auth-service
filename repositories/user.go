@@ -28,7 +28,7 @@ func (r *GormUserRepo) EmailExists(ctx context.Context, tenantID, email string) 
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Model(&models.User{}).
-		Where("tenant_id = ? AND email = ?", tenantID, email).
+		Where("tenant_id = ? AND email = ? AND is_active = ?", tenantID, email, true).
 		Count(&count).Error; err != nil {
 		return false, err
 	}
@@ -42,7 +42,7 @@ func (r *GormUserRepo) Create(ctx context.Context, u *models.User) error {
 func (r *GormUserRepo) FindByEmail(ctx context.Context, tenantID, email string) (*models.User, error) {
 	var user models.User
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND email = ?", tenantID, email).
+		Where("tenant_id = ? AND email = ? AND is_active = ?", tenantID, email, true).
 		First(&user).Error
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (r *GormUserRepo) FindByEmail(ctx context.Context, tenantID, email string) 
 func (r *GormUserRepo) FindByID(ctx context.Context, tenantID, userID string) (*models.User, error) {
 	var user models.User
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, userID).
+		Where("tenant_id = ? AND id = ? AND is_active = ?", tenantID, userID, true).
 		First(&user).Error
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (r *GormUserRepo) FindByID(ctx context.Context, tenantID, userID string) (*
 func (r *GormUserRepo) ListByTenant(ctx context.Context, tenantID string) ([]models.User, error) {
 	var users []models.User
 	err := r.db.WithContext(ctx).
-		Where("tenant_id = ?", tenantID).
+		Where("tenant_id = ? AND is_active = ?", tenantID, true).
 		Find(&users).Error
 	if err != nil {
 		return nil, err

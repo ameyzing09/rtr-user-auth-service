@@ -194,12 +194,14 @@ func (s *authService) SuperadminChangePassword(ctx context.Context, actor UserRe
 
 // AdminListUsers lists all users, optionally filtered by tenant, role, and search term
 // Used by superadmins to manage users across the platform
+// Note: Only returns active users. Soft-deleted users are automatically filtered by GORM.
+// To view inactive users, they would need to be explicitly included via a separate endpoint.
 func (s *authService) AdminListUsers(ctx context.Context, tenantID *string, role *string, search *string, page, limit int) ([]UserRead, int, error) {
 	// For now, we'll fetch all users if no tenant_id is provided, or users from a specific tenant
 	var users []models.User
 	var total int64
 
-	query := s.db.WithContext(ctx)
+	query := s.db.WithContext(ctx).Where("is_active = ?", true)
 
 	// Apply tenant filter if provided
 	if tenantID != nil && *tenantID != "" {
@@ -239,9 +241,10 @@ func (s *authService) AdminListUsers(ctx context.Context, tenantID *string, role
 
 // AdminGetUser gets a specific user by ID (across all tenants)
 // Used by superadmins to view user details
+// Note: Only returns active users. Soft-deleted users are automatically filtered by GORM.
 func (s *authService) AdminGetUser(ctx context.Context, userID string) (UserRead, error) {
 	var user models.User
-	if err := s.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ? AND is_active = ?", userID, true).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return UserRead{}, domain.ErrUserNotFound
 		}
@@ -293,12 +296,13 @@ func (s *authService) AdminResetPassword(ctx context.Context, userID string, new
 }
 
 // findSuperAdminByEmail searches for a user by email across all tenants
-// and returns the user ONLY if they have the SuperAdmin role.
+// and returns the user ONLY if they have the SuperAdmin role and are active.
 // This is used for admin login where no tenant context is available.
+// Security: Filters out inactive and soft-deleted users to prevent authentication with disabled accounts.
 func (s *authService) findSuperAdminByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
 	err := s.db.WithContext(ctx).
-		Where("email = ? AND role = ?", email, models.RoleSuperAdmin).
+		Where("email = ? AND role = ? AND is_active = ?", email, models.RoleSuperAdmin, true).
 		First(&user).Error
 	if err != nil {
 		return nil, err
